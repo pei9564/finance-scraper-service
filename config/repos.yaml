@@ -1,0 +1,51 @@
+repos:
+  - owner: langchain-ai
+    name: langgraph
+    priority: critical
+  - owner: vllm-project
+    name: vllm
+    priority: critical
+  - owner: milvus-io
+    name: milvus
+    priority: critical
+  - owner: pydantic
+    name: pydantic
+    priority: critical
+  - owner: tiangolo
+    name: fastapi
+    priority: critical
+  - owner: langchain-ai
+    name: langchain
+    priority: critical
+  - owner: kubernetes
+    name: kubernetes
+    priority: high
+  - owner: NVIDIA
+    name: NeMo
+    priority: high
+
+filters:
+  min_reactions: 0
+  min_comments_for_issue: 3
+  min_comments_for_pr: 2
+  lookback_days: 7
+  include_labels:
+    - "breaking change"
+    - "breaking-change"
+    - "type: breaking change"
+    - "security"
+    - "vulnerability"
+    - "bug"
+    - "enhancement"
+    - "feature"
+
+ai:
+  haiku_model: "claude-haiku-4-5-20251001"
+  sonnet_model: "claude-sonnet-4-6"
+  max_summary_tokens: 300
+  max_diff_tokens: 150000
+  diff_chunk_size: 50000
+
+telegram:
+  max_events_per_message: 10
+  critical_only_for_immediate: true

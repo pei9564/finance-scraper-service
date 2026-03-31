@@ -1,0 +1,24 @@
+[project]
+name = "github-intel"
+version = "0.1.0"
+description = "自動化 GitHub 技術情報收集與分析系統"
+requires-python = ">=3.12"
+dependencies = [
+    "PyGithub==2.3.0",
+    "anthropic==0.30.0",
+    "notion-client==2.2.1",
+    "python-telegram-bot==21.3",
+    "pydantic==2.7.0",
+    "pyyaml==6.0.1",
+    "python-dotenv==1.0.1",
+    "httpx==0.27.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.2.0",
+    "pytest-asyncio==0.23.7",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
