@@ -14,8 +14,11 @@ from models import AppConfig, EventType, RawGitHubEvent, RepoConfig
 
 logger = logging.getLogger(__name__)
 
-# kubernetes 單 repo 事件上限，避免淹沒其他 repo
-KUBERNETES_EVENT_CAP = 20
+# 高流量 repo 的事件上限（依留言數取 top N）
+HIGH_VOLUME_REPOS: dict[str, int] = {
+    "kubernetes/kubernetes": 20,
+    "vllm-project/vllm": 30,
+}
 
 
 class GitHubCollector:
@@ -39,11 +42,12 @@ class GitHubCollector:
             self._check_rate_limit()
             try:
                 events = self._collect_repo(repo_config)
-                # kubernetes 限制上限
-                if repo_config.full_name == "kubernetes/kubernetes" and len(events) > KUBERNETES_EVENT_CAP:
+                # 高流量 repo 限制上限
+                cap = HIGH_VOLUME_REPOS.get(repo_config.full_name)
+                if cap and len(events) > cap:
                     events.sort(key=lambda e: e.comment_count, reverse=True)
-                    events = events[:KUBERNETES_EVENT_CAP]
-                    logger.info(f"kubernetes 事件截斷至 {KUBERNETES_EVENT_CAP} 筆")
+                    events = events[:cap]
+                    logger.info(f"{repo_config.full_name} 事件截斷至 {cap} 筆")
                 all_events.extend(events)
                 logger.info(f"[{repo_config.full_name}] 收集到 {len(events)} 筆事件")
                 time.sleep(1)  # 禮貌性延遲

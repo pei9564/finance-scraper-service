@@ -112,7 +112,7 @@ async def run_pipeline() -> None:
 
     # 初始化各模組
     collector = GitHubCollector(secrets.github_token, lookback_days)
-    summarizer = Summarizer(secrets.anthropic_key, config.ai, secrets.github_token)
+    summarizer = Summarizer(secrets.google_api_key, config.ai, secrets.github_token)
     notion_writer = NotionWriter(secrets.notion_key, secrets.notion_db_ids)
     telegram = TelegramSender(secrets.telegram_token, secrets.telegram_chat_id)
 

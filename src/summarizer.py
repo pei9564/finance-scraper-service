@@ -1,7 +1,7 @@
 """
-AI 摘要器 - 使用 Claude API 產生事件摘要
-- Haiku：一般 Release、Issue、Feature PR
-- Sonnet：Breaking Change、Security、PR diff 分析
+AI 摘要器 - 使用 Google Gemini API 產生事件摘要
+- Flash：一般 Release、Issue、Feature PR（快速省錢）
+- Pro：Breaking Change、Security、PR diff 分析（精準）
 """
 from __future__ import annotations
 
@@ -11,23 +11,26 @@ import re
 import time
 from typing import Any
 
-import anthropic
 import httpx
+from google import genai
+from google.api_core.exceptions import ResourceExhausted, DeadlineExceeded, InternalServerError
 
 from models import AIConfig, ClassifiedEvent, ImpactLevel, SummarizedEvent
 
 logger = logging.getLogger(__name__)
 
-# 需要 Sonnet 精細分析的分類
-SONNET_CLASSIFICATIONS = {"Breaking", "Security", "Release/Breaking"}
+# 需要 Pro 精細分析的分類
+PRO_CLASSIFICATIONS = {"Breaking", "Security", "Release/Breaking"}
 
-# JSON 回應的預期欄位
-REQUIRED_FIELDS = {"summary", "impact_level", "tags"}
+SYSTEM_PROMPT = (
+    "你是一位資深軟體工程師，專門為技術團隊整理 GitHub 動態。"
+    "請只輸出 JSON，不要有任何其他文字。"
+)
 
 
 class Summarizer:
     def __init__(self, api_key: str, config: AIConfig, github_token: str = ""):
-        self.client = anthropic.Anthropic(api_key=api_key)
+        self.client = genai.Client(api_key=api_key)
         self.config = config
         self.github_token = github_token
 
@@ -45,8 +48,7 @@ class Summarizer:
                     f"[{i+1}/{len(events)}] {event.repo_full_name} "
                     f"({event.classification}): 摘要完成"
                 )
-                # Sonnet 呼叫後稍作延遲
-                if event.classification in SONNET_CLASSIFICATIONS:
+                if event.classification in PRO_CLASSIFICATIONS:
                     time.sleep(2)
             except Exception as exc:
                 logger.error(f"摘要失敗（{event.url}）：{exc}")
@@ -58,27 +60,26 @@ class Summarizer:
     # ------------------------------------------------------------------
 
     def _summarize_with_retry(self, event: ClassifiedEvent) -> SummarizedEvent:
-        """帶 retry 邏輯的摘要呼叫。"""
-        delays = [60, 120]  # 最多重試 2 次
+        delays = [60, 120]
         last_exc: Exception | None = None
 
         for attempt in range(3):
             try:
                 return self._summarize_one(event)
-            except anthropic.RateLimitError as e:
+            except ResourceExhausted as e:
                 last_exc = e
                 if attempt < 2:
                     wait = delays[attempt]
                     logger.warning(f"Rate limit，等待 {wait}s 後重試...")
                     time.sleep(wait)
-            except anthropic.APITimeoutError as e:
+            except DeadlineExceeded as e:
                 last_exc = e
                 if attempt < 2:
                     logger.warning(f"API timeout，等待 10s 後重試...")
                     time.sleep(10)
-            except anthropic.APIStatusError as e:
+            except InternalServerError as e:
                 last_exc = e
-                if e.status_code >= 500 and attempt < 2:
+                if attempt < 2:
                     logger.warning(f"API 5xx 錯誤，等待 30s 後重試...")
                     time.sleep(30)
                 else:
@@ -88,28 +89,24 @@ class Summarizer:
         return self._fallback(event)
 
     def _summarize_one(self, event: ClassifiedEvent) -> SummarizedEvent:
-        use_sonnet = event.classification in SONNET_CLASSIFICATIONS
-        model = self.config.sonnet_model if use_sonnet else self.config.haiku_model
+        use_pro = event.classification in PRO_CLASSIFICATIONS
+        model = self.config.pro_model if use_pro else self.config.flash_model
 
-        if use_sonnet:
-            prompt = self._build_sonnet_prompt(event)
+        if use_pro:
+            prompt = self._build_pro_prompt(event)
         else:
-            prompt = self._build_haiku_prompt(event)
+            prompt = self._build_flash_prompt(event)
 
-        response = self.client.messages.create(
+        response = self.client.models.generate_content(
             model=model,
-            max_tokens=self.config.max_summary_tokens,
-            system=(
-                "你是一位資深軟體工程師，專門為技術團隊整理 GitHub 動態。"
-                "請只輸出 JSON，不要有任何其他文字。"
-            ),
-            messages=[{"role": "user", "content": prompt}],
+            contents=f"{SYSTEM_PROMPT}\n\n{prompt}",
+            config={"max_output_tokens": self.config.max_summary_tokens * 3},
         )
 
-        raw_text = response.content[0].text.strip()
+        raw_text = response.text.strip()
         return self._parse_response(raw_text, event)
 
-    def _build_haiku_prompt(self, event: ClassifiedEvent) -> str:
+    def _build_flash_prompt(self, event: ClassifiedEvent) -> str:
         body_excerpt = (event.body or "")[:3000]
         return f"""請摘要這個 GitHub {event.event_type.value}（來自 {event.repo_full_name}）：
 
@@ -125,7 +122,7 @@ class Summarizer:
   "tags": ["最多 5 個標籤，從以下選擇：api-change, performance, security, bug-fix, new-feature, deprecation, breaking, config-change"]
 }}"""
 
-    def _build_sonnet_prompt(self, event: ClassifiedEvent) -> str:
+    def _build_pro_prompt(self, event: ClassifiedEvent) -> str:
         body_excerpt = (event.body or "")[:5000]
         diff_section = ""
 
@@ -151,12 +148,10 @@ class Summarizer:
 }}"""
 
     def _fetch_diff(self, diff_url: str) -> str:
-        """抓取 PR diff，截斷至設定的 chunk size。"""
         try:
-            headers = {}
+            headers = {"Accept": "application/vnd.github.v3.diff"}
             if self.github_token:
                 headers["Authorization"] = f"token {self.github_token}"
-            headers["Accept"] = "application/vnd.github.v3.diff"
 
             with httpx.Client(timeout=30) as client:
                 resp = client.get(diff_url, headers=headers, follow_redirects=True)
@@ -173,14 +168,14 @@ class Summarizer:
             return ""
 
     def _parse_response(self, raw_text: str, event: ClassifiedEvent) -> SummarizedEvent:
-        """解析 Claude 回傳的 JSON，容錯處理。"""
-        data: dict[str, Any] = {}
+        # 移除 Gemini 可能加的 markdown code block
+        raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
+        raw_text = re.sub(r"\s*```$", "", raw_text).strip()
 
-        # 嘗試直接解析 JSON
+        data: dict[str, Any] = {}
         try:
             data = json.loads(raw_text)
         except json.JSONDecodeError:
-            # 嘗試從文字中提取 JSON 區塊
             match = re.search(r"\{.*\}", raw_text, re.DOTALL)
             if match:
                 try:
@@ -190,16 +185,11 @@ class Summarizer:
 
         summary = data.get("summary", raw_text[:500]) or raw_text[:500]
 
-        # 解析 impact_level
         raw_impact = str(data.get("impact_level", "Medium")).capitalize()
         try:
             impact_level = ImpactLevel(raw_impact)
         except ValueError:
-            # Breaking change 分類預設為 Breaking
-            if event.classification in SONNET_CLASSIFICATIONS:
-                impact_level = ImpactLevel.HIGH
-            else:
-                impact_level = ImpactLevel.MEDIUM
+            impact_level = ImpactLevel.HIGH if event.classification in PRO_CLASSIFICATIONS else ImpactLevel.MEDIUM
 
         tags = [str(t) for t in data.get("tags", [])][:5]
         migration_steps = [str(s) for s in data.get("migration_steps", [])]
@@ -213,7 +203,6 @@ class Summarizer:
         )
 
     def _fallback(self, event: ClassifiedEvent) -> SummarizedEvent:
-        """API 失敗時的安全預設值。"""
         return SummarizedEvent(
             **event.model_dump(),
             ai_summary="[摘要暫時無法取得 - API 錯誤]",

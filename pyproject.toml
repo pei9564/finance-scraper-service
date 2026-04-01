@@ -5,7 +5,8 @@ description = "自動化 GitHub 技術情報收集與分析系統"
 requires-python = ">=3.12"
 dependencies = [
     "PyGithub==2.3.0",
-    "anthropic==0.30.0",
+    "google-genai>=1.0.0",
+    "google-api-core>=2.0.0",
     "notion-client==2.2.1",
     "python-telegram-bot==21.3",
     "pydantic==2.7.0",

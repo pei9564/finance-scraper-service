@@ -58,8 +58,8 @@ class FilterConfig(BaseModel):
 
 
 class AIConfig(BaseModel):
-    haiku_model: str = "claude-haiku-4-5-20251001"
-    sonnet_model: str = "claude-sonnet-4-6"
+    flash_model: str = "gemini-2.0-flash"
+    pro_model: str = "gemini-2.5-pro-preview-05-06"
     max_summary_tokens: int = 300
     max_diff_tokens: int = 150000
     diff_chunk_size: int = 50000
@@ -139,7 +139,7 @@ class NotionIds(BaseModel):
 
 class Secrets(BaseModel):
     github_token: str
-    anthropic_key: str
+    google_api_key: str
     notion_key: str
     notion_db_ids: NotionIds
     telegram_token: str
@@ -149,7 +149,7 @@ class Secrets(BaseModel):
     def from_env(cls) -> "Secrets":
         return cls(
             github_token=os.environ["GITHUB_TOKEN"],
-            anthropic_key=os.environ["ANTHROPIC_API_KEY"],
+            google_api_key=os.environ["GOOGLE_API_KEY"],
             notion_key=os.environ["NOTION_API_KEY"],
             notion_db_ids=NotionIds.from_env(),
             telegram_token=os.environ["TELEGRAM_BOT_TOKEN"],

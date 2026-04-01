@@ -47,7 +47,7 @@ jobs:
       - name: 執行 Intelligence Engine
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
           NOTION_DB_REPOSITORIES: ${{ secrets.NOTION_DB_REPOSITORIES }}
           NOTION_DB_ACTIVITY_LOGS: ${{ secrets.NOTION_DB_ACTIVITY_LOGS }}
