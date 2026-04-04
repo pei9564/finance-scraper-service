@@ -17,6 +17,8 @@ repos:
     name: NemoClaw
   - owner: openclaw
     name: openclaw
+  - owner: anthropics
+    name: claude-code
 
 filters:
   min_reactions: 0

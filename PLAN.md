@@ -1,4 +1,4 @@
-# GitHub Intelligence Engine - Implementation Plan
+# GitHub Collector Engine - Implementation Plan
 
 ## Context
 Build a fully automated GitHub monitoring system that weekly collects releases, issues, and PRs from tracked AI/backend repos, uses Claude API for analysis, writes to Notion, and sends Telegram notifications. Zero manual operation once deployed.
