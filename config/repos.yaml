@@ -5,8 +5,6 @@ repos:
     name: vllm
   - owner: milvus-io
     name: milvus
-  - owner: github
-    name: spec-kit
   - owner: langgenius
     name: dify
   - owner: modelcontextprotocol
@@ -17,8 +15,6 @@ repos:
     name: NemoClaw
   - owner: openclaw
     name: openclaw
-  - owner: anthropics
-    name: claude-code
 
 filters:
   min_reactions: 0
