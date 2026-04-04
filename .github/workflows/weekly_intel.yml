@@ -1,4 +1,4 @@
-name: Daily GitHub Intelligence
+name: Daily GitHub Collector
 
 on:
   schedule:
@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  intel:
-    name: Run Intelligence Pipeline
+  collector:
+    name: Run Collector Pipeline
     runs-on: ubuntu-latest
     environment: GOOGLE_API_KEY
     timeout-minutes: 60
@@ -23,7 +23,7 @@ jobs:
       - name: 安裝依賴
         run: uv sync
 
-      - name: 執行 Intelligence Engine
+      - name: 執行 GitHub Collector
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}

@@ -1,5 +1,5 @@
 """
-GitHub Intelligence Engine - 主程式
+GitHub Collector - 主程式
 執行完整 pipeline：收集 → 過濾 → 分類 → 摘要 → 輸出
 """
 from __future__ import annotations
@@ -197,7 +197,7 @@ async def run_pipeline() -> None:
 
 async def _notify_error(telegram: TelegramSender, stage: str, error: str) -> None:
     try:
-        await telegram.send_text(f"❌ GitHub Intel 錯誤\n階段：{stage}\n原因：{error[:200]}")
+        await telegram.send_text(f"❌ GitHub Collector 錯誤\n階段：{stage}\n原因：{error[:200]}")
     except Exception:
         pass
 

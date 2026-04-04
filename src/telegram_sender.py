@@ -52,7 +52,7 @@ class TelegramSender:
         day_str = datetime.utcnow().strftime("%Y-%m-%d")
 
         # 1. AI 日報摘要（純文字，不用 HTML parse mode）
-        header = f"📊 GitHub Intel 日報 {day_str}\n\n"
+        header = f"📊 GitHub Collector 日報 {day_str}\n\n"
         await self.bot.send_message(
             chat_id=self.chat_id,
             text=self._truncate(header + daily_summary),
@@ -143,6 +143,6 @@ if __name__ == "__main__":
             bot_token=os.environ["TELEGRAM_BOT_TOKEN"],
             chat_id=os.environ["TELEGRAM_CHAT_ID"],
         )
-        await sender.send_text("✅ GitHub Intel Bot 連線測試成功！")
+        await sender.send_text("✅ GitHub Collector Bot 連線測試成功！")
 
     asyncio.run(_test())
