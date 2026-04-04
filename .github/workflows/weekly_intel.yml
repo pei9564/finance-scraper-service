@@ -10,6 +10,7 @@ jobs:
   intel:
     name: Run Intelligence Pipeline
     runs-on: ubuntu-latest
+    environment: GOOGLE_API_KEY
     timeout-minutes: 60
 
     steps:
