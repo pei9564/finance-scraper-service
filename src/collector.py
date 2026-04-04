@@ -12,6 +12,7 @@ from github.Repository import Repository
 
 from models import AppConfig, EventType, RawGitHubEvent, RepoConfig
 
+
 logger = logging.getLogger(__name__)
 
 # 高流量 repo 的事件上限（依留言數取 top N）
@@ -80,7 +81,7 @@ class GitHubCollector:
                     break
                 events.append(RawGitHubEvent(
                     repo_full_name=repo_config.full_name,
-                    repo_priority=repo_config.priority,
+
                     event_type=EventType.RELEASE,
                     title=release.title or release.tag_name,
                     tag=release.tag_name,
@@ -111,7 +112,7 @@ class GitHubCollector:
                     pass
                 events.append(RawGitHubEvent(
                     repo_full_name=repo_config.full_name,
-                    repo_priority=repo_config.priority,
+
                     event_type=EventType.ISSUE,
                     title=issue.title,
                     number=issue.number,
@@ -142,7 +143,7 @@ class GitHubCollector:
                     pass
                 events.append(RawGitHubEvent(
                     repo_full_name=repo_config.full_name,
-                    repo_priority=repo_config.priority,
+
                     event_type=EventType.PR,
                     title=pr.title,
                     number=pr.number,

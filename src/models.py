@@ -8,17 +8,12 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field, computed_field, model_validator
+from pydantic import BaseModel, Field, computed_field
 
 
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
-
-class RepoPriority(str, Enum):
-    CRITICAL = "critical"
-    HIGH = "high"
-    NORMAL = "normal"
 
 
 class EventType(str, Enum):
@@ -41,7 +36,6 @@ class ImpactLevel(str, Enum):
 class RepoConfig(BaseModel):
     owner: str
     name: str
-    priority: RepoPriority = RepoPriority.NORMAL
 
     @computed_field
     @property
@@ -83,7 +77,6 @@ class AppConfig(BaseModel):
 
 class RawGitHubEvent(BaseModel):
     repo_full_name: str
-    repo_priority: RepoPriority = RepoPriority.NORMAL
     event_type: EventType
     title: str
     number: Optional[int] = None      # PR / Issue 編號；Release 為 None

@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(unzip -c github_intel_spec.docx word/document.xml)",
-      "Skill(update-config)"
-    ]
-  }
-}

@@ -1,28 +1,22 @@
 repos:
-  - owner: langchain-ai
-    name: langgraph
-    priority: critical
-  # - owner: vllm-project
-  #   name: vllm
-  #   priority: critical
-  # - owner: milvus-io
-  #   name: milvus
-  #   priority: critical
-  # - owner: pydantic
-  #   name: pydantic
-  #   priority: critical
-  # - owner: tiangolo
-  #   name: fastapi
-  #   priority: critical
-  # - owner: langchain-ai
-  #   name: langchain
-  #   priority: critical
-  # - owner: kubernetes
-  #   name: kubernetes
-  #   priority: high
-  # - owner: NVIDIA
-  #   name: NeMo
-  #   priority: high
+  - owner: huggingface
+    name: text-embeddings-inference
+  - owner: vllm-project
+    name: vllm
+  - owner: milvus-io
+    name: milvus
+  - owner: github
+    name: spec-kit
+  - owner: langgenius
+    name: dify
+  - owner: modelcontextprotocol
+    name: python-sdk
+  - owner: kubernetes
+    name: kubernetes
+  - owner: NVIDIA
+    name: NemoClaw
+  - owner: openclaw
+    name: openclaw
 
 filters:
   min_reactions: 0
