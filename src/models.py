@@ -124,16 +124,12 @@ class WeeklyReport(BaseModel):
 
 
 class NotionIds(BaseModel):
-    repositories_db: str
     activity_logs_db: str
-    weekly_radar_db: str
 
     @classmethod
     def from_env(cls) -> "NotionIds":
         return cls(
-            repositories_db=os.environ["NOTION_DB_REPOSITORIES"],
             activity_logs_db=os.environ["NOTION_DB_ACTIVITY_LOGS"],
-            weekly_radar_db=os.environ["NOTION_DB_WEEKLY_RADAR"],
         )
 
 

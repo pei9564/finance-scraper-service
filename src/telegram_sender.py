@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections import defaultdict
 from datetime import datetime
 from html import escape
 
@@ -44,41 +43,37 @@ class TelegramSender:
     # Public
     # ------------------------------------------------------------------
 
-    async def send_weekly_report(self, events: list[SummarizedEvent]) -> None:
-        """發送完整週報：優先警報 → 各 repo 摘要 → 統計。"""
+    async def send_daily_report(self, events: list[SummarizedEvent], daily_summary: str) -> None:
+        """發送每日日報：AI 摘要 + 事件列表。"""
         if not events:
-            await self._send_text("本週無新事件。")
+            await self._send_text("今日無新事件。")
             return
 
-        # 1. 發送開始通知
-        week_str = datetime.utcnow().strftime("%Y-W%U")
-        await self._send_text(f"📊 <b>GitHub Intel 週報 {week_str}</b> 開始發送...")
+        day_str = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # 1. AI 日報摘要（純文字，不用 HTML parse mode）
+        header = f"📊 GitHub Intel 日報 {day_str}\n\n"
+        await self.bot.send_message(
+            chat_id=self.chat_id,
+            text=self._truncate(header + daily_summary),
+            disable_web_page_preview=True,
+        )
         await asyncio.sleep(1)
 
-        # 2. 優先發送 Breaking/Security 個別警報
+        # 2. 若有 Breaking/Security 事件，附上連結清單
         priority_events = [
             e for e in events
             if e.classification in PRIORITY_CLASSIFICATIONS
             or e.impact_level == ImpactLevel.BREAKING
         ]
-        for event in priority_events:
-            msg = self._format_alert(event)
-            await self._send_text(msg)
-            await asyncio.sleep(1)
-
-        # 3. 各 repo 摘要
-        by_repo: dict[str, list[SummarizedEvent]] = defaultdict(list)
-        for e in events:
-            by_repo[e.repo_full_name].append(e)
-
-        for repo, repo_events in sorted(by_repo.items()):
-            digest = self._format_repo_digest(repo, repo_events)
-            await self._send_text(digest)
-            await asyncio.sleep(1)
-
-        # 4. 統計摘要
-        summary = self._format_summary(events, week_str)
-        await self._send_text(summary)
+        if priority_events:
+            lines = ["🔴 <b>需注意項目：</b>"]
+            for e in priority_events:
+                emoji = IMPACT_EMOJI.get(e.impact_level, "⚠️")
+                lines.append(
+                    f'{emoji} <a href="{escape(e.url)}">{escape(e.title[:60])}</a>'
+                )
+            await self._send_text("\n".join(lines))
 
     async def send_text(self, text: str) -> None:
         """公開的單則訊息發送。"""
@@ -112,41 +107,6 @@ class TelegramSender:
             lines.append(tags)
 
         lines.append(f'\n🔗 <a href="{escape(event.url)}">查看詳情</a>')
-        return "\n".join(lines)
-
-    def _format_repo_digest(self, repo: str, events: list[SummarizedEvent]) -> str:
-        repo_esc = escape(repo)
-        lines = [f"📦 <b>{repo_esc}</b>（{len(events)} 筆事件）", ""]
-
-        for event in events[:10]:  # 最多顯示 10 筆
-            emoji = IMPACT_EMOJI.get(event.impact_level, "▪️")
-            title = escape(event.title[:60])
-            summary = escape(event.ai_summary[:150])
-            lines.append(f"{emoji} <b>[{escape(event.classification)}]</b> {title}")
-            lines.append(f"   {summary}")
-            lines.append(f'   <a href="{escape(event.url)}">連結</a>')
-            lines.append("")
-
-        return self._truncate(("\n".join(lines)).strip())
-
-    def _format_summary(self, events: list[SummarizedEvent], week_str: str) -> str:
-        total = len(events)
-        breaking_count = sum(
-            1 for e in events
-            if e.classification in PRIORITY_CLASSIFICATIONS
-            or e.impact_level == ImpactLevel.BREAKING
-        )
-        repos_affected = len({e.repo_full_name for e in events})
-
-        lines = [
-            f"✅ <b>週報完成｜{week_str}</b>",
-            "",
-            f"📌 追蹤到 <b>{total}</b> 筆事件",
-            f"🔴 需注意 <b>{breaking_count}</b> 筆 Breaking/Security",
-            f"📂 涵蓋 <b>{repos_affected}</b> 個 repo",
-            "",
-            "報告已同步至 Notion。",
-        ]
         return "\n".join(lines)
 
     # ------------------------------------------------------------------

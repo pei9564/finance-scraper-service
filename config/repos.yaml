@@ -2,33 +2,33 @@ repos:
   - owner: langchain-ai
     name: langgraph
     priority: critical
-  - owner: vllm-project
-    name: vllm
-    priority: critical
-  - owner: milvus-io
-    name: milvus
-    priority: critical
-  - owner: pydantic
-    name: pydantic
-    priority: critical
-  - owner: tiangolo
-    name: fastapi
-    priority: critical
-  - owner: langchain-ai
-    name: langchain
-    priority: critical
-  - owner: kubernetes
-    name: kubernetes
-    priority: high
-  - owner: NVIDIA
-    name: NeMo
-    priority: high
+  # - owner: vllm-project
+  #   name: vllm
+  #   priority: critical
+  # - owner: milvus-io
+  #   name: milvus
+  #   priority: critical
+  # - owner: pydantic
+  #   name: pydantic
+  #   priority: critical
+  # - owner: tiangolo
+  #   name: fastapi
+  #   priority: critical
+  # - owner: langchain-ai
+  #   name: langchain
+  #   priority: critical
+  # - owner: kubernetes
+  #   name: kubernetes
+  #   priority: high
+  # - owner: NVIDIA
+  #   name: NeMo
+  #   priority: high
 
 filters:
   min_reactions: 0
   min_comments_for_issue: 3
   min_comments_for_pr: 2
-  lookback_days: 7
+  lookback_days: 1
   include_labels:
     - "breaking change"
     - "breaking-change"
@@ -40,7 +40,7 @@ filters:
     - "feature"
 
 ai:
-  flash_model: "gemini-2.0-flash"
+  flash_model: "gemini-2.5-flash"
   pro_model: "gemini-2.5-pro-preview-05-06"
   max_summary_tokens: 300
   max_diff_tokens: 150000

@@ -100,7 +100,7 @@ async def run_pipeline() -> None:
     # 設定
     config_path = Path(__file__).parent.parent / "config" / "repos.yaml"
     output_dir = Path(__file__).parent.parent / "output" / "weekly"
-    week_str = datetime.utcnow().strftime("%Y-W%U")
+    day_str = datetime.utcnow().strftime("%Y-%m-%d")
 
     config = load_config(config_path)
 
@@ -115,14 +115,6 @@ async def run_pipeline() -> None:
     summarizer = Summarizer(secrets.google_api_key, config.ai, secrets.github_token)
     notion_writer = NotionWriter(secrets.notion_key, secrets.notion_db_ids)
     telegram = TelegramSender(secrets.telegram_token, secrets.telegram_chat_id)
-
-    # 發送開始通知
-    try:
-        await telegram.send_text(
-            f"🚀 GitHub Intel 開始執行｜週次 {week_str}｜追蹤 {len(config.repos)} 個 repo"
-        )
-    except Exception as e:
-        logger.warning(f"Telegram 開始通知失敗：{e}")
 
     # ------------------------------------------------------------------
     # Stage 1: 收集
@@ -162,33 +154,33 @@ async def run_pipeline() -> None:
         return
 
     # ------------------------------------------------------------------
-    # Stage 4: 摘要（AI）
+    # Stage 4: 日報摘要（單次 AI 呼叫）
     # ------------------------------------------------------------------
-    summarized_events = []
+    summarized_events = summarizer.to_summarized(classified_events)
+    daily_summary = ""
     try:
-        summarized_events = summarizer.summarize_all(classified_events)
-        logger.info(f"Stage 4 完成：摘要 {len(summarized_events)} 筆事件")
+        daily_summary = summarizer.summarize_daily(classified_events)
+        logger.info("Stage 4 完成：日報摘要產生")
     except Exception as e:
         logger.error(f"Stage 4 摘要失敗：{e}")
         await _notify_error(telegram, "AI 摘要", str(e))
-        return
 
     # ------------------------------------------------------------------
     # Stage 5a: 寫入 Notion（失敗不中斷）
     # ------------------------------------------------------------------
     try:
-        notion_writer.write_all(summarized_events, config)
+        notion_writer.write_events(summarized_events)
         logger.info("Stage 5a 完成：Notion 寫入成功")
     except Exception as e:
         logger.error(f"Stage 5a Notion 寫入失敗：{e}")
         await _notify_error(telegram, "Notion 寫入", str(e))
 
     # ------------------------------------------------------------------
-    # Stage 5b: 發送 Telegram 週報（失敗不中斷）
+    # Stage 5b: 發送 Telegram 日報（失敗不中斷）
     # ------------------------------------------------------------------
     try:
-        await telegram.send_weekly_report(summarized_events)
-        logger.info("Stage 5b 完成：Telegram 週報發送成功")
+        await telegram.send_daily_report(summarized_events, daily_summary)
+        logger.info("Stage 5b 完成：Telegram 日報發送成功")
     except Exception as e:
         logger.error(f"Stage 5b Telegram 發送失敗：{e}")
 
@@ -196,7 +188,7 @@ async def run_pipeline() -> None:
     # Stage 6: 寫入 JSON artifact（無論如何都執行）
     # ------------------------------------------------------------------
     try:
-        write_json_output(output_dir, summarized_events, week_str)
+        write_json_output(output_dir, summarized_events, day_str)
     except Exception as e:
         logger.error(f"Stage 6 JSON 輸出失敗：{e}")
 

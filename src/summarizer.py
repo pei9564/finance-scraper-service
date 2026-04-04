@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 from google import genai
+from google.genai import types as genai_types
 from google.api_core.exceptions import ResourceExhausted, DeadlineExceeded, InternalServerError
 
 from models import AIConfig, ClassifiedEvent, ImpactLevel, SummarizedEvent
@@ -22,10 +23,7 @@ logger = logging.getLogger(__name__)
 # 需要 Pro 精細分析的分類
 PRO_CLASSIFICATIONS = {"Breaking", "Security", "Release/Breaking"}
 
-SYSTEM_PROMPT = (
-    "你是一位資深軟體工程師，專門為技術團隊整理 GitHub 動態。"
-    "請只輸出 JSON，不要有任何其他文字。"
-)
+SYSTEM_PROMPT = "你是一位資深軟體工程師，專門為技術團隊整理 GitHub 動態。"
 
 
 class Summarizer:
@@ -38,22 +36,85 @@ class Summarizer:
     # Public
     # ------------------------------------------------------------------
 
-    def summarize_all(self, events: list[ClassifiedEvent]) -> list[SummarizedEvent]:
-        results = []
-        for i, event in enumerate(events):
-            try:
-                summarized = self._summarize_with_retry(event)
-                results.append(summarized)
-                logger.info(
-                    f"[{i+1}/{len(events)}] {event.repo_full_name} "
-                    f"({event.classification}): 摘要完成"
-                )
-                if event.classification in PRO_CLASSIFICATIONS:
-                    time.sleep(2)
-            except Exception as exc:
-                logger.error(f"摘要失敗（{event.url}）：{exc}")
-                results.append(self._fallback(event))
-        return results
+    def to_summarized(self, events: list[ClassifiedEvent]) -> list[SummarizedEvent]:
+        """將 ClassifiedEvent 直接轉為 SummarizedEvent（不呼叫 AI）。"""
+        return [self._fallback(e) for e in events]
+
+    def summarize_daily(self, events: list[ClassifiedEvent]) -> str:
+        """對所有事件產生一則日報摘要（單次 API 呼叫）。"""
+        if not events:
+            return "今日無新事件。"
+        try:
+            delays = [60, 120]
+            last_exc: Exception | None = None
+            for attempt in range(3):
+                try:
+                    return self._call_daily_summary(events)
+                except ResourceExhausted as e:
+                    last_exc = e
+                    if attempt < 2:
+                        logger.warning(f"Rate limit，等待 {delays[attempt]}s 後重試...")
+                        time.sleep(delays[attempt])
+                except (DeadlineExceeded, InternalServerError) as e:
+                    last_exc = e
+                    if attempt < 2:
+                        logger.warning(f"API 錯誤，等待 30s 後重試...")
+                        time.sleep(30)
+            logger.error(f"日報摘要重試耗盡：{last_exc}")
+        except Exception as e:
+            logger.error(f"日報摘要失敗：{e}")
+        return self._fallback_daily(events)
+
+    def _build_event_block(self, e: ClassifiedEvent) -> str:
+        lines = [f"[{e.classification}] {e.repo_full_name}: {e.title}"]
+
+        if e.event_type.value == "Release":
+            if e.tag:
+                lines.append(f"  版本：{e.tag}")
+            if e.body:
+                lines.append(f"  Release Notes：{e.body[:1500]}")
+        else:
+            if e.labels:
+                lines.append(f"  Labels：{', '.join(e.labels)}")
+            if e.comment_count or e.reactions:
+                lines.append(f"  留言：{e.comment_count}，Reactions：{e.reactions}")
+            if e.body:
+                lines.append(f"  說明：{e.body[:500]}")
+
+        return "\n".join(lines)
+
+    def _call_daily_summary(self, events: list[ClassifiedEvent]) -> str:
+        event_blocks = "\n\n".join(self._build_event_block(e) for e in events)
+        prompt = f"""根據以下 GitHub 事件，直接輸出每日技術摘要。
+
+規則：
+- 全程使用繁體中文
+- 不要有開場白、問候語、結語，直接從內容開始
+- 若有 Breaking Change 或 Security 問題，放在最前面並加上 ⚠️
+- 依 repo 分組，每個 repo 用 2-4 條重點說明
+- Release 必須從 Release Notes 提取具體變更內容
+- 每條重點控制在 40 字以內
+- 純文字，不要任何 markdown 符號
+
+事件：
+{event_blocks}"""
+
+        response = self.client.models.generate_content(
+            model=self.config.flash_model,
+            contents=f"{SYSTEM_PROMPT}\n\n{prompt}",
+            config=genai_types.GenerateContentConfig(max_output_tokens=8192),
+        )
+        finish_reason = response.candidates[0].finish_reason if response.candidates else "unknown"
+        logger.debug(f"日報摘要 finish_reason: {finish_reason}")
+        if str(finish_reason) == "FinishReason.MAX_TOKENS":
+            logger.warning("日報摘要被 MAX_TOKENS 截斷，考慮縮短 prompt 或提高 token 上限")
+        return response.text.strip()
+
+    def _fallback_daily(self, events: list[ClassifiedEvent]) -> str:
+        lines = [f"📋 今日共 {len(events)} 筆事件："]
+        for e in events:
+            lines.append(f"• [{e.classification}] {e.repo_full_name}: {e.title}")
+        return "\n".join(lines)
 
     # ------------------------------------------------------------------
     # Private
