@@ -1,37 +1,15 @@
-name: Weekly GitHub Intelligence
+name: Daily GitHub Intelligence
 
 on:
   schedule:
-    # 每週日 15:00 UTC = 23:00 CST (UTC+8)
-    - cron: '0 15 * * 0'
+    # 每天 01:30 UTC = 09:30 CST (UTC+8)
+    - cron: '30 1 * * *'
   workflow_dispatch:
-    inputs:
-      lookback_days:
-        description: '覆蓋 lookback 天數（預設 7）'
-        required: false
-        default: '7'
 
 jobs:
-  test:
-    name: Run Unit Tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-
-      - name: 安裝依賴
-        run: uv sync --group dev
-
-      - name: 執行單元測試
-        run: uv run pytest tests/ -m "not e2e" -v
-
   intel:
     name: Run Intelligence Pipeline
     runs-on: ubuntu-latest
-    needs: test
     timeout-minutes: 60
 
     steps:
@@ -49,18 +27,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
-          NOTION_DB_REPOSITORIES: ${{ secrets.NOTION_DB_REPOSITORIES }}
           NOTION_DB_ACTIVITY_LOGS: ${{ secrets.NOTION_DB_ACTIVITY_LOGS }}
-          NOTION_DB_WEEKLY_RADAR: ${{ secrets.NOTION_DB_WEEKLY_RADAR }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          LOOKBACK_DAYS: ${{ github.event.inputs.lookback_days || '7' }}
         run: uv run python src/main.py
 
       - name: 上傳 JSON artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: weekly-intel-${{ github.run_number }}
+          name: daily-intel-${{ github.run_number }}
           path: output/weekly/
-          retention-days: 90
+          retention-days: 30
