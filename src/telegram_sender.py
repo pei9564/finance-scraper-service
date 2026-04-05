@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from html import escape
 
 from telegram import Bot
@@ -49,7 +49,8 @@ class TelegramSender:
             await self._send_text("今日無新事件。")
             return
 
-        day_str = datetime.utcnow().strftime("%Y-%m-%d")
+        CST = timezone(timedelta(hours=8))
+        day_str = datetime.now(CST).strftime("%Y-%m-%d")
 
         # 1. AI 日報摘要（純文字，不用 HTML parse mode）
         header = f"📊 GitHub Collector 日報 {day_str}\n\n"

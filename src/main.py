@@ -9,7 +9,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
@@ -100,7 +100,8 @@ async def run_pipeline() -> None:
     # 設定
     config_path = Path(__file__).parent.parent / "config" / "repos.yaml"
     output_dir = Path(__file__).parent.parent / "output" / "weekly"
-    day_str = datetime.utcnow().strftime("%Y-%m-%d")
+    CST = timezone(timedelta(hours=8))
+    day_str = datetime.now(CST).strftime("%Y-%m-%d")
 
     config = load_config(config_path)
 
