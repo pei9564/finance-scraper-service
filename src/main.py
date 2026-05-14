@@ -83,6 +83,7 @@ def write_json_output(
             "created_at": e.created_at.isoformat(),
             "impact_level": e.impact_level.value,
             "ai_summary": e.ai_summary,
+            "body": e.body,
             "tags": e.tags,
             "migration_steps": e.migration_steps,
             # source-specific display fields

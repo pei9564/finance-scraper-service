@@ -65,6 +65,10 @@ class AIConfig(BaseModel):
     max_summary_tokens: int = 300
     max_diff_tokens: int = 150000
     diff_chunk_size: int = 50000
+    # 本地 vLLM（OpenAI 相容），用於 news/paper 逐則中文摘要
+    vllm_enabled: bool = True
+    vllm_base_url: str = "http://localhost:8000/v1"
+    vllm_model: str = ""  # 留空則自動向 /models 探測
 
 
 class TelegramConfig(BaseModel):

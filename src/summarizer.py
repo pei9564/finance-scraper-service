@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import time
 from typing import Any
@@ -31,14 +32,117 @@ class Summarizer:
         self.client = genai.Client(api_key=api_key)
         self.config = config
         self.github_token = github_token
+        # env var 覆蓋 config（真實的內部 gateway 位址/金鑰放 .env，不進公開 repo）
+        self.vllm_base_url = os.environ.get("VLLM_BASE_URL", config.vllm_base_url)
+        self.vllm_model = os.environ.get("VLLM_MODEL", config.vllm_model)
+        self.vllm_api_key = os.environ.get("VLLM_API_KEY", "EMPTY")
+        self._vllm_model_cache: str | None = None
 
     # ------------------------------------------------------------------
     # Public
     # ------------------------------------------------------------------
 
     def to_summarized(self, events: list[ClassifiedEvent]) -> list[SummarizedEvent]:
-        """將 ClassifiedEvent 直接轉為 SummarizedEvent（不呼叫 AI）。"""
-        return [self._fallback(e) for e in events]
+        """將 ClassifiedEvent 轉為 SummarizedEvent。
+        news/paper 逐則用本地 vLLM 產生中文摘要（失敗 fallback Gemini）；
+        GitHub 事件 ai_summary 留空。"""
+        result = []
+        for e in events:
+            summary = ""
+            if e.source_type in (SourceType.NEWS, SourceType.PAPER):
+                summary = self._summarize_event(e)
+            result.append(
+                SummarizedEvent(
+                    **e.model_dump(),
+                    ai_summary=summary,
+                    impact_level=ImpactLevel.MEDIUM,
+                    tags=[],
+                    migration_steps=[],
+                )
+            )
+        return result
+
+    # ------------------------------------------------------------------
+    # 逐則中文摘要 - vLLM 優先，Gemini fallback
+    # ------------------------------------------------------------------
+
+    def _summarize_event(self, event: ClassifiedEvent) -> str:
+        if self.config.vllm_enabled:
+            try:
+                return self._summarize_via_vllm(event)
+            except Exception as e:
+                logger.warning(f"vLLM 摘要失敗，改用 Gemini：{e}")
+        try:
+            return self._summarize_via_gemini(event)
+        except Exception as e:
+            logger.error(f"Gemini 摘要也失敗（{event.url}）：{e}")
+            return ""
+
+    def _build_event_prompt(self, event: ClassifiedEvent) -> str:
+        body = (event.body or "")[:3000]
+        if event.source_type == SourceType.PAPER:
+            kind = "論文"
+            head = (
+                f"論文標題：{event.title}\n"
+                f"作者：{', '.join(event.authors[:5])}\n"
+                f"類別：{', '.join(event.categories[:3])}\n"
+                f"摘要原文：{body}"
+            )
+        else:
+            kind = "新聞"
+            head = (
+                f"新聞標題：{event.title}\n"
+                f"來源：{event.feed_name}\n"
+                f"內文：{body}"
+            )
+        return (
+            f"請用繁體中文，以 2-3 句話摘要以下{kind}的重點。"
+            f"只輸出摘要本身，不要開場白、結語或 markdown 符號。\n\n{head}"
+        )
+
+    def _vllm_model_name(self) -> str:
+        if self.vllm_model:
+            return self.vllm_model
+        if self._vllm_model_cache:
+            return self._vllm_model_cache
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(
+                f"{self.vllm_base_url}/models",
+                headers={"Authorization": f"Bearer {self.vllm_api_key}"},
+            )
+            resp.raise_for_status()
+            self._vllm_model_cache = resp.json()["data"][0]["id"]
+        logger.info(f"vLLM 自動偵測 model：{self._vllm_model_cache}")
+        return self._vllm_model_cache
+
+    def _summarize_via_vllm(self, event: ClassifiedEvent) -> str:
+        payload = {
+            "model": self._vllm_model_name(),
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": self._build_event_prompt(event)},
+            ],
+            "max_tokens": self.config.max_summary_tokens,
+            "temperature": 0.3,
+        }
+        with httpx.Client(timeout=60) as client:
+            resp = client.post(
+                f"{self.vllm_base_url}/chat/completions",
+                json=payload,
+                headers={"Authorization": f"Bearer {self.vllm_api_key}"},
+            )
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"].strip()
+
+    def _summarize_via_gemini(self, event: ClassifiedEvent) -> str:
+        response = self.client.models.generate_content(
+            model=self.config.flash_model,
+            contents=f"{SYSTEM_PROMPT}\n\n{self._build_event_prompt(event)}",
+            config=genai_types.GenerateContentConfig(
+                max_output_tokens=self.config.max_summary_tokens * 3
+            ),
+        )
+        return response.text.strip()
 
     def summarize_daily(self, events: list[ClassifiedEvent]) -> str:
         """對所有事件產生一則日報摘要（單次 API 呼叫）。"""

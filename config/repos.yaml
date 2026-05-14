@@ -47,6 +47,10 @@ ai:
   max_summary_tokens: 300
   max_diff_tokens: 150000
   diff_chunk_size: 50000
+  # 本地 vLLM：news/paper 逐則中文摘要的預設來源，失敗時 fallback 到 Gemini
+  vllm_enabled: true
+  vllm_base_url: "http://localhost:8000/v1"
+  vllm_model: ""  # 留空自動偵測
 
 telegram:
   max_events_per_message: 10

@@ -99,6 +99,7 @@ _HTML = """<!DOCTYPE html>
   .badge.impact-High { background: #db6d2833; color: #db6d28; }
   .card-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
   .card-summary { font-size: 13px; color: #c9d1d9; line-height: 1.6; }
+  .card-body-preview { color: #8b949e; font-style: italic; }
   .card-tags { margin-top: 8px; font-size: 12px; color: #8b949e; }
   .empty { color: #8b949e; padding: 40px 0; text-align: center; }
 </style>
@@ -220,10 +221,19 @@ function cardHtml(e) {
   const tags = (e.tags || []).length
     ? `<div class="card-tags">${e.tags.map(t => "#" + esc(t)).join(" ")}</div>` : "";
 
+  let summary;
+  if (e.ai_summary) {
+    summary = `<div class="card-summary">${esc(e.ai_summary)}</div>`;
+  } else if (e.body) {
+    summary = `<div class="card-summary card-body-preview">${esc(e.body.slice(0, 200))}…</div>`;
+  } else {
+    summary = "";
+  }
+
   return `<div class="card">
     <div class="card-meta">${meta}</div>
     <div class="card-title"><a href="${esc(e.url)}" target="_blank">${esc(e.title)}</a></div>
-    <div class="card-summary">${esc(e.ai_summary)}</div>
+    ${summary}
     ${tags}
   </div>`;
 }
