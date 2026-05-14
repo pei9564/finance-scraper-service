@@ -42,11 +42,27 @@ filters:
     - "feature"
 
 ai:
-  max_summary_tokens: 300
   # 內部 LLM gateway（OpenAI 相容）；真實位址/金鑰用 .env 的 VLLM_* 覆蓋
   vllm_enabled: true
   vllm_base_url: "http://localhost:8000/v1"
   vllm_model: ""  # 留空自動偵測
+  # 各來源的逐則摘要設定（指令文字與長度可直接在此調整，不用改程式）
+  summary_profiles:
+    news:
+      max_tokens: 600
+      instruction: |
+        請用繁體中文，以大約 200 字摘要以下新聞的重點，
+        涵蓋事件背景、關鍵細節與影響。
+        只輸出摘要本身，不要開場白、結語、條列符號或 markdown 符號。
+    paper:
+      max_tokens: 1200
+      instruction: |
+        請用繁體中文，以大約 400-500 字盡可能完整地摘要以下論文，
+        內容包含：研究要解決的問題、採用的方法、主要發現與結論。
+        重要：讀者是非資訊科系的學生，請用淺顯易懂的白話文說明，
+        避免專業術語；若必須使用術語，請順帶用一句話解釋它的意思，
+        必要時可用生活化的比喻幫助理解。
+        只輸出摘要本身，不要開場白、結語或 markdown 符號。
 
 telegram:
   max_events_per_message: 10

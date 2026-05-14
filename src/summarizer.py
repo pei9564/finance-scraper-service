@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import Callable
 
 import httpx
 
@@ -15,6 +16,36 @@ from models import AIConfig, ClassifiedEvent, ImpactLevel, SourceType, Summarize
 logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = "你是一位資深軟體工程師，專門為技術團隊整理技術情報。"
+
+
+# ---------------------------------------------------------------------------
+# 各來源的 head block builder（把 event 結構化欄位組成文字）
+# 新增來源：寫一個 _build_<x>_head，加進 _HEAD_BUILDERS，再到 repos.yaml 加 profile
+# ---------------------------------------------------------------------------
+
+def _build_news_head(event: ClassifiedEvent) -> str:
+    body = (event.body or "")[:3000]
+    return (
+        f"新聞標題：{event.title}\n"
+        f"來源：{event.feed_name}\n"
+        f"內文：{body}"
+    )
+
+
+def _build_paper_head(event: ClassifiedEvent) -> str:
+    body = (event.body or "")[:3000]
+    return (
+        f"論文標題：{event.title}\n"
+        f"作者：{', '.join(event.authors[:5])}\n"
+        f"類別：{', '.join(event.categories[:3])}\n"
+        f"摘要原文：{body}"
+    )
+
+
+_HEAD_BUILDERS: dict[SourceType, Callable[[ClassifiedEvent], str]] = {
+    SourceType.NEWS: _build_news_head,
+    SourceType.PAPER: _build_paper_head,
+}
 
 
 class Summarizer:
@@ -36,10 +67,7 @@ class Summarizer:
         result = []
         for e in events:
             summary = ""
-            if self.config.vllm_enabled and e.source_type in (
-                SourceType.NEWS,
-                SourceType.PAPER,
-            ):
+            if self.config.vllm_enabled and e.source_type in _HEAD_BUILDERS:
                 summary = self._summarize_event(e)
             result.append(
                 SummarizedEvent(
@@ -105,35 +133,16 @@ class Summarizer:
     # ------------------------------------------------------------------
 
     def _summarize_event(self, event: ClassifiedEvent) -> str:
+        head_builder = _HEAD_BUILDERS.get(event.source_type)
+        profile = self.config.summary_profiles.get(event.source_type.value)
+        if head_builder is None or profile is None:
+            return ""
+        prompt = f"{profile.instruction.strip()}\n\n{head_builder(event)}"
         try:
-            return self._chat(
-                self._build_event_prompt(event), self.config.max_summary_tokens
-            )
+            return self._chat(prompt, profile.max_tokens)
         except Exception as e:
             logger.error(f"摘要失敗（{event.url}）：{e}")
             return ""
-
-    def _build_event_prompt(self, event: ClassifiedEvent) -> str:
-        body = (event.body or "")[:3000]
-        if event.source_type == SourceType.PAPER:
-            kind = "論文"
-            head = (
-                f"論文標題：{event.title}\n"
-                f"作者：{', '.join(event.authors[:5])}\n"
-                f"類別：{', '.join(event.categories[:3])}\n"
-                f"摘要原文：{body}"
-            )
-        else:
-            kind = "新聞"
-            head = (
-                f"新聞標題：{event.title}\n"
-                f"來源：{event.feed_name}\n"
-                f"內文：{body}"
-            )
-        return (
-            f"請用繁體中文，以 2-3 句話摘要以下{kind}的重點。"
-            f"只輸出摘要本身，不要開場白、結語或 markdown 符號。\n\n{head}"
-        )
 
     # ------------------------------------------------------------------
     # 日報摘要 - multi-source

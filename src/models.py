@@ -59,12 +59,18 @@ class FilterConfig(BaseModel):
     lookback_days: int = 7
 
 
+class SummaryProfile(BaseModel):
+    max_tokens: int = 600
+    instruction: str = ""
+
+
 class AIConfig(BaseModel):
-    max_summary_tokens: int = 300
     # 內部 LLM gateway（OpenAI 相容），用於逐則與日報摘要
     vllm_enabled: bool = True
     vllm_base_url: str = "http://localhost:8000/v1"
     vllm_model: str = ""  # 留空則自動向 /models 探測
+    # 各來源的逐則摘要設定，key 為 SourceType 值（news / paper / ...）
+    summary_profiles: dict[str, SummaryProfile] = Field(default_factory=dict)
 
 
 class TelegramConfig(BaseModel):
