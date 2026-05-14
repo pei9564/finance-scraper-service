@@ -6,6 +6,9 @@ on:
     - cron: '30 1 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   collector:
     name: Run Collector Pipeline
@@ -15,6 +18,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: 取回既有網頁資料
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages-data
+        continue-on-error: true
+
+      - name: 還原既有資料
+        run: |
+          mkdir -p output/weekly
+          if [ -d gh-pages-data ]; then
+            cp gh-pages-data/*.json output/weekly/ 2>/dev/null || true
+          fi
 
       - uses: astral-sh/setup-uv@v4
         with:
@@ -32,6 +49,13 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: uv run python src/main.py
+
+      - name: 部署到 GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./output/weekly
 
       - name: 上傳 JSON artifact
         if: always()

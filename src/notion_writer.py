@@ -9,7 +9,7 @@ from typing import Any
 
 from notion_client import Client
 
-from models import NotionIds, SummarizedEvent
+from models import NotionIds, SourceType, SummarizedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +51,22 @@ class NotionWriter:
         logger.info(f"Notion：新增 {inserted} 筆，跳過重複 {skipped} 筆")
 
     def _create_page(self, event: SummarizedEvent) -> None:
+        # Adapt Repo/Type fields for non-GitHub sources
+        if event.source_type == SourceType.NEWS:
+            repo_value = event.feed_name
+            type_value = "Article"
+        elif event.source_type == SourceType.PAPER:
+            repo_value = ", ".join(event.categories[:3])
+            type_value = "Paper"
+        else:
+            repo_value = event.repo_full_name
+            type_value = event.event_type.value
+
         props: dict[str, Any] = {
             "Name": {"title": [{"text": {"content": event.title[:100]}}]},
-            "Repo": {"rich_text": [{"text": {"content": event.repo_full_name}}]},
-            "Type": {"select": {"name": event.event_type.value}},
+            "Repo": {"rich_text": [{"text": {"content": repo_value}}]},
+            "Type": {"select": {"name": type_value}},
+            "Source": {"select": {"name": event.source_type.value}},
             "Date": {"date": {"start": event.created_at.date().isoformat()}},
             "URL": {"url": event.url},
             "Classification": {"select": {"name": event.classification}},

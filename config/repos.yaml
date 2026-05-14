@@ -16,6 +16,24 @@ repos:
   - owner: openclaw
     name: openclaw
 
+news:
+  hackernews_enabled: true
+  hackernews_top_n: 20
+  hackernews_min_score: 50
+  rss_feeds:
+    - name: "TechCrunch AI"
+      url: "https://techcrunch.com/category/artificial-intelligence/feed/"
+    - name: "The Verge AI"
+      url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+
+papers:
+  arxiv_categories:
+    - "cs.AI"
+    - "cs.CL"
+    - "cs.LG"
+  arxiv_max_per_category: 10
+  arxiv_keywords: []
+
 filters:
   min_reactions: 0
   min_comments_for_issue: 3

@@ -15,7 +15,7 @@ from html import escape
 from telegram import Bot
 from telegram.error import TelegramError
 
-from models import ImpactLevel, SummarizedEvent
+from models import ImpactLevel, SourceType, SummarizedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class TelegramSender:
     # ------------------------------------------------------------------
 
     async def send_daily_report(self, events: list[SummarizedEvent], daily_summary: str) -> None:
-        """發送每日日報：AI 摘要 + 事件列表。"""
+        """發送每日日報：AI 摘要 + 分來源事件列表。"""
         if not events:
             await self._send_text("今日無新事件。")
             return
@@ -52,8 +52,8 @@ class TelegramSender:
         CST = timezone(timedelta(hours=8))
         day_str = datetime.now(CST).strftime("%Y-%m-%d")
 
-        # 1. AI 日報摘要（純文字，不用 HTML parse mode）
-        header = f"📊 GitHub Collector 日報 {day_str}\n\n"
+        # 1. AI 日報摘要
+        header = f"📊 Tech Intel 日報 {day_str}\n\n"
         await self.bot.send_message(
             chat_id=self.chat_id,
             text=self._truncate(header + daily_summary),
@@ -73,6 +73,40 @@ class TelegramSender:
                 emoji = IMPACT_EMOJI.get(e.impact_level, "⚠️")
                 lines.append(
                     f'{emoji} <a href="{escape(e.url)}">{escape(e.title[:60])}</a>'
+                )
+            await self._send_text("\n".join(lines))
+
+        # 3. 分來源事件列表
+        github_events = [e for e in events if e.source_type == SourceType.GITHUB]
+        news_events = [e for e in events if e.source_type == SourceType.NEWS]
+        paper_events = [e for e in events if e.source_type == SourceType.PAPER]
+
+        if github_events:
+            lines = [f"🔔 GitHub（{len(github_events)} 筆）"]
+            for e in github_events[:10]:
+                lines.append(
+                    f'• <a href="{escape(e.url)}">{escape(e.title[:60])}</a>'
+                    f" [{escape(e.classification)}]"
+                )
+            await self._send_text("\n".join(lines))
+            await asyncio.sleep(1)
+
+        if news_events:
+            lines = [f"📰 網路新聞（{len(news_events)} 筆）"]
+            for e in news_events[:10]:
+                source = escape(e.feed_name)
+                lines.append(
+                    f'• [{source}] <a href="{escape(e.url)}">{escape(e.title[:60])}</a>'
+                )
+            await self._send_text("\n".join(lines))
+            await asyncio.sleep(1)
+
+        if paper_events:
+            lines = [f"📄 最新論文（{len(paper_events)} 筆）"]
+            for e in paper_events[:10]:
+                cats = ", ".join(e.categories[:2])
+                lines.append(
+                    f'• [{escape(cats)}] <a href="{escape(e.url)}">{escape(e.title[:60])}</a>'
                 )
             await self._send_text("\n".join(lines))
 

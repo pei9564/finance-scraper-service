@@ -1,11 +1,11 @@
 """
-規則式分類器 - 不呼叫 LLM，純靠標籤和標題判斷
+規則式分類器 - 不呼叫 LLM，純靠標籤和標題判斷（支援多來源）
 """
 from __future__ import annotations
 
 import logging
 
-from models import ClassifiedEvent, EventType, RawGitHubEvent
+from models import ClassifiedEvent, EventType, RawEvent, SourceType
 from filter import BREAKING_LABELS, SECURITY_LABELS, score_event
 from models import FilterConfig
 
@@ -21,17 +21,23 @@ BUG_LABELS = {"bug", "fix", "regression", "bugfix"}
 FEATURE_LABELS = {"feature", "enhancement", "feat", "new feature"}
 
 
-def classify(event: RawGitHubEvent) -> ClassifiedEvent:
-    """
-    規則分類（優先順序由高到低）：
-    Release/Breaking > Breaking > Security > Performance > Bug > Feature > Other
-    """
+def classify(event: RawEvent) -> ClassifiedEvent:
+    if event.source_type == SourceType.GITHUB:
+        return _classify_github(event)
+    elif event.source_type == SourceType.NEWS:
+        return _classify_news(event)
+    elif event.source_type == SourceType.PAPER:
+        return _classify_paper(event)
+    return ClassifiedEvent(**event.model_dump(), classification="Other", significance_score=0.0)
+
+
+def _classify_github(event: RawEvent) -> ClassifiedEvent:
     labels_lower = {label.lower() for label in event.labels}
     title_lower = event.title.lower()
     body_lower = (event.body or "").lower()
 
-    classification = _determine_classification(event, labels_lower, title_lower, body_lower)
-    _filter_config = FilterConfig()  # 使用預設值計算分數
+    classification = _determine_github_classification(event, labels_lower, title_lower, body_lower)
+    _filter_config = FilterConfig()
     sig_score = score_event(event, _filter_config)
 
     return ClassifiedEvent(
@@ -41,49 +47,56 @@ def classify(event: RawGitHubEvent) -> ClassifiedEvent:
     )
 
 
-def _determine_classification(
-    event: RawGitHubEvent,
+def _classify_news(event: RawEvent) -> ClassifiedEvent:
+    _filter_config = FilterConfig()
+    sig_score = score_event(event, _filter_config)
+    return ClassifiedEvent(
+        **event.model_dump(),
+        classification="News",
+        significance_score=sig_score,
+    )
+
+
+def _classify_paper(event: RawEvent) -> ClassifiedEvent:
+    _filter_config = FilterConfig()
+    sig_score = score_event(event, _filter_config)
+    return ClassifiedEvent(
+        **event.model_dump(),
+        classification="Paper",
+        significance_score=sig_score,
+    )
+
+
+def _determine_github_classification(
+    event: RawEvent,
     labels_lower: set[str],
     title_lower: str,
     body_lower: str,
 ) -> str:
-    # Release：檢查是否含 breaking change
     if event.event_type == EventType.RELEASE:
         breaking_keywords = {"breaking change", "breaking:", "removed:", "deprecated:"}
         if any(kw in body_lower for kw in breaking_keywords):
             return "Release/Breaking"
         return "Release"
 
-    # Breaking change 標籤
     if labels_lower & BREAKING_LABELS:
         return "Breaking"
-
-    # 安全相關
     if labels_lower & SECURITY_LABELS:
         return "Security"
-
-    # 效能相關（標題關鍵字）
     if any(kw in title_lower for kw in PERF_KEYWORDS):
         return "Performance"
-
-    # Bug 修復
     if labels_lower & BUG_LABELS:
         return "Bug"
-
-    # 新功能
     if labels_lower & FEATURE_LABELS:
         return "Feature"
-
-    # 已 merge 的 PR 預設為 Feature
     if event.event_type == EventType.PR and event.is_merged:
         return "Feature"
 
     return "Other"
 
 
-def classify_all(events: list[RawGitHubEvent]) -> list[ClassifiedEvent]:
+def classify_all(events: list[RawEvent]) -> list[ClassifiedEvent]:
     classified = [classify(e) for e in events]
-    # 統計各分類數量
     counts: dict[str, int] = {}
     for e in classified:
         counts[e.classification] = counts.get(e.classification, 0) + 1

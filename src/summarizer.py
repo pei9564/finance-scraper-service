@@ -1,6 +1,6 @@
 """
-AI 摘要器 - 使用 Google Gemini API 產生事件摘要
-- Flash：一般 Release、Issue、Feature PR（快速省錢）
+AI 摘要器 - 使用 Google Gemini API 產生事件摘要（支援多來源）
+- Flash：一般 Release、Issue、Feature PR、News、Paper（快速省錢）
 - Pro：Breaking Change、Security、PR diff 分析（精準）
 """
 from __future__ import annotations
@@ -16,14 +16,14 @@ from google import genai
 from google.genai import types as genai_types
 from google.api_core.exceptions import ResourceExhausted, DeadlineExceeded, InternalServerError
 
-from models import AIConfig, ClassifiedEvent, ImpactLevel, SummarizedEvent
+from models import AIConfig, ClassifiedEvent, ImpactLevel, SourceType, SummarizedEvent
 
 logger = logging.getLogger(__name__)
 
 # 需要 Pro 精細分析的分類
 PRO_CLASSIFICATIONS = {"Breaking", "Security", "Release/Breaking"}
 
-SYSTEM_PROMPT = "你是一位資深軟體工程師，專門為技術團隊整理 GitHub 動態。"
+SYSTEM_PROMPT = "你是一位資深軟體工程師，專門為技術團隊整理技術情報。"
 
 
 class Summarizer:
@@ -65,9 +65,12 @@ class Summarizer:
             logger.error(f"日報摘要失敗：{e}")
         return self._fallback_daily(events)
 
-    def _build_event_block(self, e: ClassifiedEvent) -> str:
-        lines = [f"[{e.classification}] {e.repo_full_name}: {e.title}"]
+    # ------------------------------------------------------------------
+    # Daily summary - multi-source
+    # ------------------------------------------------------------------
 
+    def _build_github_block(self, e: ClassifiedEvent) -> str:
+        lines = [f"[{e.classification}] {e.repo_full_name}: {e.title}"]
         if e.event_type.value == "Release":
             if e.tag:
                 lines.append(f"  版本：{e.tag}")
@@ -80,24 +83,58 @@ class Summarizer:
                 lines.append(f"  留言：{e.comment_count}，Reactions：{e.reactions}")
             if e.body:
                 lines.append(f"  說明：{e.body[:500]}")
+        return "\n".join(lines)
 
+    def _build_news_block(self, e: ClassifiedEvent) -> str:
+        score_info = f"（score: {e.score}）" if e.score else ""
+        author_info = f" by {e.author}" if e.author else ""
+        lines = [f"[{e.feed_name}] {e.title}{score_info}{author_info}"]
+        if e.body:
+            lines.append(f"  {e.body[:300]}")
+        return "\n".join(lines)
+
+    def _build_paper_block(self, e: ClassifiedEvent) -> str:
+        cats = ", ".join(e.categories[:3])
+        authors = ", ".join(e.authors[:3])
+        if len(e.authors) > 3:
+            authors += " et al."
+        lines = [f"[{cats}] {e.title} — {authors}"]
+        if e.body:
+            lines.append(f"  {e.body[:400]}")
         return "\n".join(lines)
 
     def _call_daily_summary(self, events: list[ClassifiedEvent]) -> str:
-        event_blocks = "\n\n".join(self._build_event_block(e) for e in events)
-        prompt = f"""根據以下 GitHub 事件，直接輸出每日技術摘要。
+        github_events = [e for e in events if e.source_type == SourceType.GITHUB]
+        news_events = [e for e in events if e.source_type == SourceType.NEWS]
+        paper_events = [e for e in events if e.source_type == SourceType.PAPER]
+
+        sections = []
+        if github_events:
+            blocks = "\n\n".join(self._build_github_block(e) for e in github_events)
+            sections.append(f"🔔 GitHub 事件：\n{blocks}")
+        if news_events:
+            blocks = "\n\n".join(self._build_news_block(e) for e in news_events)
+            sections.append(f"📰 網路新聞：\n{blocks}")
+        if paper_events:
+            blocks = "\n\n".join(self._build_paper_block(e) for e in paper_events)
+            sections.append(f"📄 最新論文：\n{blocks}")
+
+        all_blocks = "\n\n".join(sections)
+
+        prompt = f"""根據以下多來源技術情報，直接輸出每日摘要。
 
 規則：
 - 全程使用繁體中文
 - 不要有開場白、問候語、結語，直接從內容開始
 - 若有 Breaking Change 或 Security 問題，放在最前面並加上 ⚠️
-- 依 repo 分組，每個 repo 用 2-4 條重點說明
-- Release 必須從 Release Notes 提取具體變更內容
+- 依來源分區塊：🔔 GitHub、📰 網路新聞、📄 最新論文
+- GitHub：依 repo 分組，每個 repo 用 2-4 條重點，Release 需提取具體變更
+- 新聞：每則用 1-2 條重點，標註來源
+- 論文：每篇用 1 條重點摘要，標註類別
 - 每條重點控制在 40 字以內
 - 純文字，不要任何 markdown 符號
 
-事件：
-{event_blocks}"""
+{all_blocks}"""
 
         response = self.client.models.generate_content(
             model=self.config.flash_model,
@@ -113,11 +150,16 @@ class Summarizer:
     def _fallback_daily(self, events: list[ClassifiedEvent]) -> str:
         lines = [f"📋 今日共 {len(events)} 筆事件："]
         for e in events:
-            lines.append(f"• [{e.classification}] {e.repo_full_name}: {e.title}")
+            if e.source_type == SourceType.GITHUB:
+                lines.append(f"• [{e.classification}] {e.repo_full_name}: {e.title}")
+            elif e.source_type == SourceType.NEWS:
+                lines.append(f"• [{e.feed_name}] {e.title}")
+            elif e.source_type == SourceType.PAPER:
+                lines.append(f"• [Paper] {e.title}")
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
-    # Private
+    # Private (per-event summarization)
     # ------------------------------------------------------------------
 
     def _summarize_with_retry(self, event: ClassifiedEvent) -> SummarizedEvent:
@@ -168,6 +210,13 @@ class Summarizer:
         return self._parse_response(raw_text, event)
 
     def _build_flash_prompt(self, event: ClassifiedEvent) -> str:
+        if event.source_type == SourceType.NEWS:
+            return self._build_news_prompt(event)
+        elif event.source_type == SourceType.PAPER:
+            return self._build_paper_prompt(event)
+        return self._build_github_flash_prompt(event)
+
+    def _build_github_flash_prompt(self, event: ClassifiedEvent) -> str:
         body_excerpt = (event.body or "")[:3000]
         return f"""請摘要這個 GitHub {event.event_type.value}（來自 {event.repo_full_name}）：
 
@@ -181,6 +230,40 @@ class Summarizer:
   "summary": "2-3 句技術摘要，說明這個變更做了什麼以及對使用者的影響",
   "impact_level": "High|Medium|Low",
   "tags": ["最多 5 個標籤，從以下選擇：api-change, performance, security, bug-fix, new-feature, deprecation, breaking, config-change"]
+}}"""
+
+    def _build_news_prompt(self, event: ClassifiedEvent) -> str:
+        body_excerpt = (event.body or "")[:2000]
+        return f"""請摘要這則技術新聞（來自 {event.feed_name}）：
+
+標題：{event.title}
+內文：
+{body_excerpt}
+
+請輸出以下 JSON 格式（不要加任何其他文字）：
+{{
+  "summary": "2-3 句摘要，說明這則新聞的重點及對技術圈的影響",
+  "impact_level": "High|Medium|Low",
+  "tags": ["最多 5 個標籤：ai, cloud, open-source, security, product-launch, regulation, funding, research"]
+}}"""
+
+    def _build_paper_prompt(self, event: ClassifiedEvent) -> str:
+        body_excerpt = (event.body or "")[:3000]
+        authors_str = ", ".join(event.authors[:5])
+        cats_str = ", ".join(event.categories[:3])
+        return f"""請摘要這篇研究論文（arXiv {event.arxiv_id}）：
+
+標題：{event.title}
+作者：{authors_str}
+類別：{cats_str}
+摘要：
+{body_excerpt}
+
+請輸出以下 JSON 格式（不要加任何其他文字）：
+{{
+  "summary": "2-3 句摘要，說明論文核心方法、貢獻及潛在應用",
+  "impact_level": "High|Medium|Low",
+  "tags": ["最多 5 個標籤：llm, multimodal, alignment, efficiency, reasoning, retrieval, agent, training, evaluation, dataset"]
 }}"""
 
     def _build_pro_prompt(self, event: ClassifiedEvent) -> str:

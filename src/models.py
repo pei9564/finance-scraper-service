@@ -16,10 +16,18 @@ from pydantic import BaseModel, Field, computed_field
 # ---------------------------------------------------------------------------
 
 
+class SourceType(str, Enum):
+    GITHUB = "github"
+    NEWS = "news"
+    PAPER = "paper"
+
+
 class EventType(str, Enum):
     RELEASE = "Release"
     ISSUE = "Issue"
     PR = "PR"
+    ARTICLE = "Article"
+    PAPER = "Paper"
 
 
 class ImpactLevel(str, Enum):
@@ -64,34 +72,97 @@ class TelegramConfig(BaseModel):
     critical_only_for_immediate: bool = True
 
 
+class RSSFeedConfig(BaseModel):
+    name: str
+    url: str
+
+
+class NewsConfig(BaseModel):
+    hackernews_enabled: bool = True
+    hackernews_top_n: int = 20
+    hackernews_min_score: int = 50
+    rss_feeds: list[RSSFeedConfig] = Field(default_factory=list)
+
+
+class PaperConfig(BaseModel):
+    arxiv_categories: list[str] = Field(default_factory=lambda: ["cs.AI", "cs.CL", "cs.LG"])
+    arxiv_max_per_category: int = 10
+    arxiv_keywords: list[str] = Field(default_factory=list)
+
+
 class AppConfig(BaseModel):
     repos: list[RepoConfig]
+    news: NewsConfig = Field(default_factory=NewsConfig)
+    papers: PaperConfig = Field(default_factory=PaperConfig)
     filters: FilterConfig = Field(default_factory=FilterConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
 
 
 # ---------------------------------------------------------------------------
-# GitHub event models
+# Event models - base + source-specific
 # ---------------------------------------------------------------------------
 
-class RawGitHubEvent(BaseModel):
-    repo_full_name: str
+class RawEvent(BaseModel):
+    source_type: SourceType = SourceType.GITHUB
     event_type: EventType
     title: str
-    number: Optional[int] = None      # PR / Issue 編號；Release 為 None
-    tag: Optional[str] = None         # 只有 Release 才有
     url: str
     created_at: datetime
     body: Optional[str] = None
+
+
+class RawGitHubEvent(RawEvent):
+    source_type: SourceType = SourceType.GITHUB
+    repo_full_name: str
+    number: Optional[int] = None
+    tag: Optional[str] = None
     labels: list[str] = Field(default_factory=list)
     comment_count: int = 0
     reactions: int = 0
-    is_merged: Optional[bool] = None  # 只有 PR 才有
-    diff_url: Optional[str] = None    # 只有 PR 才有
+    is_merged: Optional[bool] = None
+    diff_url: Optional[str] = None
 
 
-class ClassifiedEvent(RawGitHubEvent):
+class RawNewsEvent(RawEvent):
+    source_type: SourceType = SourceType.NEWS
+    event_type: EventType = EventType.ARTICLE
+    feed_name: str = ""
+    score: int = 0
+    author: Optional[str] = None
+
+
+class RawPaperEvent(RawEvent):
+    source_type: SourceType = SourceType.PAPER
+    event_type: EventType = EventType.PAPER
+    authors: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(default_factory=list)
+    arxiv_id: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Pipeline event models (generic across sources)
+# ---------------------------------------------------------------------------
+
+class ClassifiedEvent(RawEvent):
+    # GitHub-specific (Optional for non-GitHub sources)
+    repo_full_name: Optional[str] = None
+    number: Optional[int] = None
+    tag: Optional[str] = None
+    labels: list[str] = Field(default_factory=list)
+    comment_count: int = 0
+    reactions: int = 0
+    is_merged: Optional[bool] = None
+    diff_url: Optional[str] = None
+    # News-specific
+    feed_name: str = ""
+    score: int = 0
+    author: Optional[str] = None
+    # Paper-specific
+    authors: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(default_factory=list)
+    arxiv_id: str = ""
+    # Pipeline fields
     classification: str = "Other"
     significance_score: float = 0.0
 
