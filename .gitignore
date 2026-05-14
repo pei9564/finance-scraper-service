@@ -206,3 +206,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .claude/
+
+# 產生的每日輸出（本地 build 產物）
+output/weekly/*
+!output/weekly/.gitkeep

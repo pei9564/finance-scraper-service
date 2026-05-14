@@ -60,12 +60,8 @@ class FilterConfig(BaseModel):
 
 
 class AIConfig(BaseModel):
-    flash_model: str = "gemini-2.0-flash"
-    pro_model: str = "gemini-2.5-pro-preview-05-06"
     max_summary_tokens: int = 300
-    max_diff_tokens: int = 150000
-    diff_chunk_size: int = 50000
-    # 本地 vLLM（OpenAI 相容），用於 news/paper 逐則中文摘要
+    # 內部 LLM gateway（OpenAI 相容），用於逐則與日報摘要
     vllm_enabled: bool = True
     vllm_base_url: str = "http://localhost:8000/v1"
     vllm_model: str = ""  # 留空則自動向 /models 探測
@@ -203,7 +199,6 @@ class NotionIds(BaseModel):
 
 class Secrets(BaseModel):
     github_token: str
-    google_api_key: str
     notion_key: str
     notion_db_ids: NotionIds
     telegram_token: str
@@ -213,7 +208,6 @@ class Secrets(BaseModel):
     def from_env(cls) -> "Secrets":
         return cls(
             github_token=os.environ["GITHUB_TOKEN"],
-            google_api_key=os.environ["GOOGLE_API_KEY"],
             notion_key=os.environ["NOTION_API_KEY"],
             notion_db_ids=NotionIds.from_env(),
             telegram_token=os.environ["TELEGRAM_BOT_TOKEN"],

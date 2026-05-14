@@ -134,7 +134,7 @@ async def run_pipeline() -> None:
     github_collector = GitHubCollector(secrets.github_token, lookback_days)
     news_collector = NewsCollector(config.news, lookback_days)
     paper_collector = PaperCollector(config.papers, lookback_days)
-    summarizer = Summarizer(secrets.google_api_key, config.ai, secrets.github_token)
+    summarizer = Summarizer(config.ai)
     notion_writer = NotionWriter(secrets.notion_key, secrets.notion_db_ids)
     telegram = TelegramSender(secrets.telegram_token, secrets.telegram_chat_id)
 

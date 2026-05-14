@@ -42,12 +42,8 @@ filters:
     - "feature"
 
 ai:
-  flash_model: "gemini-2.5-flash"
-  pro_model: "gemini-2.5-pro-preview-05-06"
   max_summary_tokens: 300
-  max_diff_tokens: 150000
-  diff_chunk_size: 50000
-  # 本地 vLLM：news/paper 逐則中文摘要的預設來源，失敗時 fallback 到 Gemini
+  # 內部 LLM gateway（OpenAI 相容）；真實位址/金鑰用 .env 的 VLLM_* 覆蓋
   vllm_enabled: true
   vllm_base_url: "http://localhost:8000/v1"
   vllm_model: ""  # 留空自動偵測

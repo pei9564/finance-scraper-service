@@ -79,9 +79,6 @@ _HTML = """<!DOCTYPE html>
   .date-item.active { background: #1f6feb; color: #fff; }
 
   #main { flex: 1; padding: 24px 32px; max-width: 900px; }
-  #summary { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-             padding: 16px; margin-bottom: 20px; white-space: pre-wrap;
-             font-size: 14px; line-height: 1.7; }
   #tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .tab { padding: 6px 14px; background: #21262d; border: 1px solid #30363d;
          border-radius: 6px; cursor: pointer; font-size: 13px; }
@@ -110,7 +107,6 @@ _HTML = """<!DOCTYPE html>
   <div id="date-list"></div>
 </div>
 <div id="main">
-  <div id="summary"></div>
   <div id="tabs"></div>
   <div id="content"></div>
 </div>
@@ -150,8 +146,6 @@ async function selectDate(d, el) {
   el.classList.add("active");
   const res = await fetch(d + ".json");
   currentData = await res.json();
-  document.getElementById("summary").textContent =
-    currentData.daily_summary || "（無摘要）";
   updateTabCounts();
   render();
 }
