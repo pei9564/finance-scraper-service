@@ -151,6 +151,7 @@ async function selectDate(d, el) {
   currentData = await res.json();
   document.getElementById("summary").textContent =
     currentData.daily_summary || "（無摘要）";
+  updateTabCounts();
   render();
 }
 
@@ -159,6 +160,7 @@ function renderTabs() {
   SOURCES.forEach(s => {
     const el = document.createElement("div");
     el.className = "tab" + (s.key === currentSource ? " active" : "");
+    el.dataset.key = s.key;
     el.textContent = s.label;
     el.onclick = () => {
       currentSource = s.key;
@@ -167,6 +169,18 @@ function renderTabs() {
       render();
     };
     tabs.appendChild(el);
+  });
+}
+
+function updateTabCounts() {
+  const events = (currentData && currentData.events) || [];
+  document.querySelectorAll(".tab").forEach(el => {
+    const key = el.dataset.key;
+    const label = SOURCES.find(s => s.key === key).label;
+    const count = key === "all"
+      ? events.length
+      : events.filter(e => e.source === key).length;
+    el.textContent = `${label} (${count})`;
   });
 }
 
