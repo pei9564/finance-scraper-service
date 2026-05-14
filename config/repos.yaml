@@ -3,18 +3,10 @@ repos:
     name: text-embeddings-inference
   - owner: vllm-project
     name: vllm
-  - owner: milvus-io
-    name: milvus
-  - owner: langgenius
-    name: dify
-  - owner: modelcontextprotocol
-    name: python-sdk
-  - owner: kubernetes
-    name: kubernetes
-  - owner: NVIDIA
-    name: NemoClaw
-  - owner: openclaw
-    name: openclaw
+  # - owner: NVIDIA
+  #   name: NemoClaw
+  # - owner: openclaw
+  #   name: openclaw
 
 news:
   hackernews_enabled: true
