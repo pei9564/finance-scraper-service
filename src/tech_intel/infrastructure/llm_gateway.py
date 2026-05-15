@@ -65,3 +65,22 @@ class LLMGatewayClient:
             self._model_cache = resp.json()["data"][0]["id"]
         logger.info(f"gateway 自動偵測 model：{self._model_cache}")
         return self._model_cache
+
+    def health(self, timeout: float = 3.0) -> bool:
+        """快速探測 gateway 是否可用 — pipeline 啟動時用，避免拖慢整個流程。
+
+        True：可呼叫 chat()，arxiv curation / 摘要會啟動。
+        False：跳過依賴 LLM 的步驟（arxiv 抓取、SummarizeStep、DailySummarizer），
+        其他來源照常收集，事件無摘要可後續用「補摘要」按鈕補。
+        """
+        try:
+            with httpx.Client(timeout=timeout) as client:
+                resp = client.get(
+                    f"{self.base_url}/models",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+                resp.raise_for_status()
+            return True
+        except Exception as e:
+            logger.warning(f"LLM gateway 不可用：{e}")
+            return False

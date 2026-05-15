@@ -45,16 +45,20 @@ class PaperCollector:
         self.llm = llm
 
     def collect(self) -> list[RawPaperEvent]:
-        # arXiv：抓全部 → LLM 篩 top_n
-        try:
-            arxiv_papers = self._fetch_arxiv()
-            logger.info(f"arXiv 抓取：{len(arxiv_papers)} 筆")
-        except Exception as e:
-            logger.error(f"arXiv 抓取失敗：{e}")
-            arxiv_papers = []
+        # arXiv：需要 LLM 篩 top_n，沒有 LLM 時整段跳過（避免回傳上百筆未過濾論文當噪音）
+        arxiv_papers: list[RawPaperEvent] = []
+        if self.llm:
+            try:
+                arxiv_papers = self._fetch_arxiv()
+                logger.info(f"arXiv 抓取：{len(arxiv_papers)} 筆")
+            except Exception as e:
+                logger.error(f"arXiv 抓取失敗：{e}")
+                arxiv_papers = []
 
-        if self.llm and self.config.arxiv_top_n > 0 and len(arxiv_papers) > self.config.arxiv_top_n:
-            arxiv_papers = self._curate(arxiv_papers)
+            if self.config.arxiv_top_n > 0 and len(arxiv_papers) > self.config.arxiv_top_n:
+                arxiv_papers = self._curate(arxiv_papers)
+        else:
+            logger.info("LLM gateway 不可用，跳過 arXiv 抓取（HF Daily Papers 仍會收集）")
 
         # HF Daily Papers：按 upvotes 排序取 top
         hf_papers: list[RawPaperEvent] = []

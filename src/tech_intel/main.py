@@ -60,7 +60,11 @@ async def run_pipeline() -> None:
     CST = timezone(timedelta(hours=8))
     day_str = os.environ.get("RUN_DATE") or datetime.now(CST).strftime("%Y-%m-%d")
 
-    llm = LLMGatewayClient(config.ai)
+    raw_llm = LLMGatewayClient(config.ai)
+    llm = raw_llm if raw_llm.health() else None
+    if llm is None:
+        logger.warning("LLM gateway 不可用 — 依賴 LLM 的步驟（arxiv/逐則摘要/日報摘要）會自動降級")
+
     pipeline = Pipeline(
         source_units=build_source_units(config, secrets, llm, lookback_days),
         output_writers=build_output_writers(config, secrets, OUTPUT_DIR),

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class BuildDeps:
     config: AppConfig
     secrets: Secrets
-    llm: LLMGateway
+    llm: LLMGateway | None  # None 代表 gateway 不可用，依賴 LLM 的步驟會自行降級
     lookback: int
 
 
@@ -47,7 +47,7 @@ STEP_FACTORIES: dict[str, Callable[[BuildDeps], ProcessingStep]] = {
 def build_source_units(
     config: AppConfig,
     secrets: Secrets,
-    llm: LLMGateway,
+    llm: LLMGateway | None,
     lookback: int,
 ) -> list[SourceUnit]:
     deps = BuildDeps(config=config, secrets=secrets, llm=llm, lookback=lookback)

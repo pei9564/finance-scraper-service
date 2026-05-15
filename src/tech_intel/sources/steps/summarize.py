@@ -53,7 +53,7 @@ _HEAD_BUILDERS: dict[SourceType, Callable[[ClassifiedEvent], str]] = {
 class SummarizeStep:
     name = "summarize"
 
-    def __init__(self, llm: LLMGateway, config: AIConfig):
+    def __init__(self, llm: LLMGateway | None, config: AIConfig):
         self.llm = llm
         self.config = config
 
@@ -62,7 +62,11 @@ class SummarizeStep:
 
         event 由 orchestrator 預先轉成 SummarizedEvent；若該來源沒有對應的
         head builder 或 summary profile，原樣回傳。
+        LLM 不可用時直接跳過——卡片會顯示「摘要待重跑」，可後續用 retry 補。
         """
+        if self.llm is None:
+            return event
+
         head_builder = _HEAD_BUILDERS.get(event.source_type)
         profile = self.config.summary_profiles.get(event.source_type.value)
         if head_builder is None or profile is None:

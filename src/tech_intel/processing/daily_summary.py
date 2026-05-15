@@ -10,13 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 class DailySummarizer:
-    def __init__(self, llm: LLMGateway):
+    def __init__(self, llm: LLMGateway | None):
         self.llm = llm
 
     def summarize(self, events: list[ClassifiedEvent]) -> str:
-        """產生一則日報摘要；失敗時回退為純文字清單。"""
+        """產生一則日報摘要；失敗或無 LLM 時回退為純文字清單。"""
         if not events:
             return "今日無新事件。"
+        if self.llm is None:
+            return self._fallback(events)
         try:
             return self._call_daily_summary(events)
         except Exception as e:

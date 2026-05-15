@@ -146,10 +146,10 @@ sources:
     enabled: true
     steps: []
   news:
-    enabled: false
+    enabled: true
     steps: [summarize]
   paper:
-    enabled: false
+    enabled: true
     steps: [summarize]
   finance:
     enabled: true
