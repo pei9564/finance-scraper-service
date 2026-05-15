@@ -1,5 +1,6 @@
-"""
-Notion 寫入器 - 寫入重大更新到單一資料庫
+"""Notion 輸出
+- NotionWriter：底層資料庫寫入（去重、只寫重大更新）
+- NotionOutput：OutputWriter 介面的包裝
 """
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from typing import Any
 
 from notion_client import Client
 
-from models import NotionIds, SourceType, SummarizedEvent
+from tech_intel.domain import NotionIds, SourceType, SummarizedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ class NotionWriter:
         logger.info(f"Notion：新增 {inserted} 筆，跳過重複 {skipped} 筆")
 
     def _create_page(self, event: SummarizedEvent) -> None:
-        # Adapt Repo/Type fields for non-GitHub sources
+        # 非 GitHub 來源的 Repo/Type 欄位轉換
         if event.source_type == SourceType.NEWS:
             repo_value = event.feed_name
             type_value = "Article"
@@ -100,3 +101,18 @@ class NotionWriter:
         except Exception as e:
             logger.warning(f"載入現有 URL 失敗：{e}")
             self._existing_urls = set()
+
+
+class NotionOutput:
+    name = "notion"
+
+    def __init__(self, token: str, db_ids: NotionIds):
+        self.writer = NotionWriter(token, db_ids)
+
+    async def write(
+        self,
+        events: list[SummarizedEvent],
+        daily_summary: str,
+        day_str: str,
+    ) -> None:
+        self.writer.write_events(events)

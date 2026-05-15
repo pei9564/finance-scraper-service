@@ -1,13 +1,11 @@
-"""
-規則式分類器 - 不呼叫 LLM，純靠標籤和標題判斷（支援多來源）
-"""
+"""規則式分類器 - 不呼叫 LLM，純靠標籤和標題判斷（支援多來源）"""
 from __future__ import annotations
 
 import logging
 
-from models import ClassifiedEvent, EventType, RawEvent, SourceType
-from filter import BREAKING_LABELS, SECURITY_LABELS, score_event
-from models import FilterConfig
+from tech_intel.domain import ClassifiedEvent, EventType, FilterConfig, RawEvent, SourceType
+
+from .filter import BREAKING_LABELS, SECURITY_LABELS, score_event
 
 logger = logging.getLogger(__name__)
 

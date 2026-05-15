@@ -1,18 +1,15 @@
 """測試規則式分類器"""
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 from datetime import datetime
+
 import pytest
-from models import EventType, RawGitHubEvent, RepoPriority
-from classifier import classify
+
+from tech_intel.domain import EventType, RawGitHubEvent
+from tech_intel.processing.classifier import classify
 
 
 def make_event(**kwargs) -> RawGitHubEvent:
     defaults = dict(
         repo_full_name="test/repo",
-        repo_priority=RepoPriority.NORMAL,
         event_type=EventType.ISSUE,
         title="Test",
         url="https://github.com/test/repo/issues/1",

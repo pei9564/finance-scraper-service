@@ -210,3 +210,6 @@ __marimo__/
 # 產生的每日輸出（本地 build 產物）
 output/weekly/*
 !output/weekly/.gitkeep
+
+# 由 site_generator 在專案根目錄生成的網頁入口
+/index.html

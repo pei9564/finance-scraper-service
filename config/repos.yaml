@@ -23,8 +23,23 @@ papers:
     - "cs.AI"
     - "cs.CL"
     - "cs.LG"
-  arxiv_max_per_category: 10
+    - "cs.CV"
+    - "cs.NE"
+    - "stat.ML"
+    - "cs.IR"
+    - "cs.RO"
+    - "cs.HC"
+    - "cs.DC"
+    - "cs.AR"
+    - "cs.SE"
+    - "cs.CR"
+    - "eess.AS"
+    - "eess.IV"
+  arxiv_fetch_limit: 200
+  arxiv_top_n: 5
   arxiv_keywords: []
+  hf_papers_enabled: true
+  hf_top_n: 5
 
 filters:
   min_reactions: 0
@@ -67,3 +82,24 @@ ai:
 telegram:
   max_events_per_message: 10
   critical_only_for_immediate: true
+
+# 各來源的開關與逐則處理步驟鏈（步驟名稱對應 sources/registry.py 的 STEP_FACTORIES）
+sources:
+  github:
+    enabled: true
+    steps: []
+  news:
+    enabled: true
+    steps: [summarize]
+  paper:
+    enabled: true
+    steps: [summarize]
+
+# 各輸出目標的開關
+outputs:
+  web:
+    enabled: true
+  telegram:
+    enabled: false
+  notion:
+    enabled: false

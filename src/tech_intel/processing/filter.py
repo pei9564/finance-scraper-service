@@ -1,11 +1,9 @@
-"""
-重要性過濾器 - 對事件評分並過濾低重要性事件（支援多來源）
-"""
+"""重要性過濾器 - 對事件評分並過濾低重要性事件（支援多來源）"""
 from __future__ import annotations
 
 import logging
 
-from models import EventType, FilterConfig, RawEvent, SourceType
+from tech_intel.domain import EventType, FilterConfig, RawEvent, SourceType
 
 logger = logging.getLogger(__name__)
 

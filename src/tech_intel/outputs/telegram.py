@@ -1,9 +1,6 @@
-"""
-Telegram 通知發送器
-- Breaking/Security 優先個別發送
-- 每個 repo 一則摘要訊息
-- 最後一則總結統計
-使用 HTML parse mode（避免 Markdown 特殊字元問題）
+"""Telegram 輸出
+- TelegramSender：底層 Bot API 封裝（HTML parse mode）
+- TelegramOutput：OutputWriter 介面的包裝
 """
 from __future__ import annotations
 
@@ -15,7 +12,7 @@ from html import escape
 from telegram import Bot
 from telegram.error import TelegramError
 
-from models import ImpactLevel, SourceType, SummarizedEvent
+from tech_intel.domain import ImpactLevel, SourceType, SummarizedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -165,19 +162,16 @@ class TelegramSender:
             logger.error(f"Telegram 發送失敗：{e}")
 
 
-# ---------------------------------------------------------------------------
-# 獨立執行測試
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    import os
-    from dotenv import load_dotenv
-    load_dotenv()
+class TelegramOutput:
+    name = "telegram"
 
-    async def _test():
-        sender = TelegramSender(
-            bot_token=os.environ["TELEGRAM_BOT_TOKEN"],
-            chat_id=os.environ["TELEGRAM_CHAT_ID"],
-        )
-        await sender.send_text("✅ GitHub Collector Bot 連線測試成功！")
+    def __init__(self, bot_token: str, chat_id: str):
+        self.sender = TelegramSender(bot_token, chat_id)
 
-    asyncio.run(_test())
+    async def write(
+        self,
+        events: list[SummarizedEvent],
+        daily_summary: str,
+        day_str: str,
+    ) -> None:
+        await self.sender.send_daily_report(events, daily_summary)

@@ -1,17 +1,14 @@
-"""
-GitHub 資料收集器 - 抓取 release、issue、PR
-"""
+"""GitHub 資料收集器 - 抓取 release、issue、PR"""
 from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
-from github import Github, GithubException, RateLimitExceededException
+from github import Github, GithubException
 from github.Repository import Repository
 
-from models import AppConfig, EventType, RawGitHubEvent, RepoConfig
-
+from tech_intel.domain import EventType, RawGitHubEvent, RepoConfig, SourceType
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +20,11 @@ HIGH_VOLUME_REPOS: dict[str, int] = {
 
 
 class GitHubCollector:
-    def __init__(self, token: str, lookback_days: int = 7):
+    source_type = SourceType.GITHUB
+
+    def __init__(self, token: str, repos: list[RepoConfig], lookback_days: int = 7):
         self.gh = Github(token, per_page=100)
+        self.repos = repos
         self.lookback_days = lookback_days
         # GitHub API 使用 UTC naive datetime
         self.since: datetime = datetime.utcnow() - timedelta(days=lookback_days)
@@ -33,9 +33,9 @@ class GitHubCollector:
     # Public
     # ------------------------------------------------------------------
 
-    def collect_all(self, config: AppConfig) -> list[RawGitHubEvent]:
+    def collect(self) -> list[RawGitHubEvent]:
         """依序收集所有追蹤 repo 的事件，kubernetes 最後處理（API 消耗最多）。"""
-        repos = sorted(config.repos, key=lambda r: r.full_name == "kubernetes/kubernetes")
+        repos = sorted(self.repos, key=lambda r: r.full_name == "kubernetes/kubernetes")
         all_events: list[RawGitHubEvent] = []
         failed: list[str] = []
 
@@ -81,7 +81,6 @@ class GitHubCollector:
                     break
                 events.append(RawGitHubEvent(
                     repo_full_name=repo_config.full_name,
-
                     event_type=EventType.RELEASE,
                     title=release.title or release.tag_name,
                     tag=release.tag_name,
@@ -112,7 +111,6 @@ class GitHubCollector:
                     pass
                 events.append(RawGitHubEvent(
                     repo_full_name=repo_config.full_name,
-
                     event_type=EventType.ISSUE,
                     title=issue.title,
                     number=issue.number,
@@ -143,7 +141,6 @@ class GitHubCollector:
                     pass
                 events.append(RawGitHubEvent(
                     repo_full_name=repo_config.full_name,
-
                     event_type=EventType.PR,
                     title=pr.title,
                     number=pr.number,
@@ -173,32 +170,3 @@ class GitHubCollector:
                     time.sleep(wait_secs)
         except Exception as e:
             logger.warning(f"無法取得 rate limit 資訊：{e}")
-
-
-# ---------------------------------------------------------------------------
-# 獨立執行測試
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    import os
-    import yaml
-    from pathlib import Path
-    from dotenv import load_dotenv
-
-    load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-
-    config_path = Path(__file__).parent.parent / "config" / "repos.yaml"
-    with open(config_path) as f:
-        raw = yaml.safe_load(f)
-
-    from models import AppConfig
-    config = AppConfig(**raw)
-
-    collector = GitHubCollector(
-        token=os.environ["GITHUB_TOKEN"],
-        lookback_days=int(os.environ.get("LOOKBACK_DAYS", "7")),
-    )
-    events = collector.collect_all(config)
-    print(f"\n共收集到 {len(events)} 筆事件")
-    for e in events[:5]:
-        print(f"  [{e.event_type.value}] {e.repo_full_name}: {e.title[:60]}")

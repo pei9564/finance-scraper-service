@@ -1,17 +1,13 @@
 """測試重要性過濾器"""
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 from datetime import datetime
-from models import EventType, FilterConfig, RawGitHubEvent, RepoPriority
-from filter import filter_events, score_event
+
+from tech_intel.domain import EventType, FilterConfig, RawGitHubEvent
+from tech_intel.processing.filter import filter_events, score_event
 
 
 def make_event(**kwargs) -> RawGitHubEvent:
     defaults = dict(
         repo_full_name="pydantic/pydantic",
-        repo_priority=RepoPriority.CRITICAL,
         event_type=EventType.ISSUE,
         title="Test",
         url="https://github.com/pydantic/pydantic/issues/1",

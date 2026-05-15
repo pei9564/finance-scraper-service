@@ -1,6 +1,4 @@
-"""
-網路新聞收集器 - Hacker News Algolia API + RSS feeds
-"""
+"""網路新聞收集器 - Hacker News Algolia API + RSS feeds"""
 from __future__ import annotations
 
 import logging
@@ -9,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import feedparser
 import httpx
 
-from models import NewsConfig, RawNewsEvent
+from tech_intel.domain import NewsConfig, RawNewsEvent, SourceType
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +15,13 @@ HN_API = "https://hn.algolia.com/api/v1/search"
 
 
 class NewsCollector:
+    source_type = SourceType.NEWS
+
     def __init__(self, config: NewsConfig, lookback_days: int = 1):
         self.config = config
         self.lookback_days = lookback_days
 
-    def collect_all(self) -> list[RawNewsEvent]:
+    def collect(self) -> list[RawNewsEvent]:
         events: list[RawNewsEvent] = []
 
         if self.config.hackernews_enabled:

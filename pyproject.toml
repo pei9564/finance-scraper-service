@@ -13,13 +13,26 @@ dependencies = [
     "httpx==0.27.0",
     "feedparser>=6.0.0",
     "arxiv>=2.1.0",
+    "trafilatura>=1.12.0",
 ]
+
+[project.scripts]
+tech-intel = "tech_intel.main:cli"
+tech-intel-server = "tech_intel.server:cli"
+tech-intel-retry = "tech_intel.retry:cli"
 
 [dependency-groups]
 dev = [
     "pytest==8.2.0",
     "pytest-asyncio==0.23.7",
 ]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
