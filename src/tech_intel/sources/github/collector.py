@@ -67,11 +67,7 @@ class GitHubCollector:
 
     def _collect_repo(self, repo_config: RepoConfig) -> list[RawGitHubEvent]:
         repo = self.gh.get_repo(repo_config.full_name)
-        events: list[RawGitHubEvent] = []
-        events.extend(self._collect_releases(repo, repo_config))
-        events.extend(self._collect_issues(repo, repo_config))
-        events.extend(self._collect_prs(repo, repo_config))
-        return events
+        return self._collect_releases(repo, repo_config)
 
     def _collect_releases(self, repo: Repository, repo_config: RepoConfig) -> list[RawGitHubEvent]:
         events = []

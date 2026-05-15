@@ -61,10 +61,17 @@ class DailySummarizer:
             lines.append(f"  {e.body[:400]}")
         return "\n".join(lines)
 
+    def _build_finance_block(self, e: ClassifiedEvent) -> str:
+        lines = [f"[{e.feed_name}] {e.title}"]
+        if e.body:
+            lines.append(f"  {e.body[:300]}")
+        return "\n".join(lines)
+
     def _call_daily_summary(self, events: list[ClassifiedEvent]) -> str:
         github_events = [e for e in events if e.source_type == SourceType.GITHUB]
         news_events = [e for e in events if e.source_type == SourceType.NEWS]
         paper_events = [e for e in events if e.source_type == SourceType.PAPER]
+        finance_events = [e for e in events if e.source_type == SourceType.FINANCE]
 
         sections = []
         if github_events:
@@ -76,6 +83,9 @@ class DailySummarizer:
         if paper_events:
             blocks = "\n\n".join(self._build_paper_block(e) for e in paper_events)
             sections.append(f"📄 最新論文：\n{blocks}")
+        if finance_events:
+            blocks = "\n\n".join(self._build_finance_block(e) for e in finance_events)
+            sections.append(f"💰 財經新聞：\n{blocks}")
 
         all_blocks = "\n\n".join(sections)
 
@@ -85,10 +95,11 @@ class DailySummarizer:
 - 全程使用繁體中文
 - 不要有開場白、問候語、結語，直接從內容開始
 - 若有 Breaking Change 或 Security 問題，放在最前面並加上 ⚠️
-- 依來源分區塊：🔔 GitHub、📰 網路新聞、📄 最新論文
+- 依來源分區塊：🔔 GitHub、📰 網路新聞、📄 最新論文、💰 財經新聞
 - GitHub：依 repo 分組，每個 repo 用 2-4 條重點，Release 需提取具體變更
 - 新聞：每則用 1-2 條重點，標註來源
 - 論文：每篇用 1 條重點摘要，標註類別
+- 財經：每則用 1-2 條重點，標註來源；台股、美股、總體經濟可分小組
 - 每條重點控制在 40 字以內
 - 純文字，不要任何 markdown 符號
 
@@ -105,4 +116,6 @@ class DailySummarizer:
                 lines.append(f"• [{e.feed_name}] {e.title}")
             elif e.source_type == SourceType.PAPER:
                 lines.append(f"• [Paper] {e.title}")
+            elif e.source_type == SourceType.FINANCE:
+                lines.append(f"• [{e.feed_name}] {e.title}")
         return "\n".join(lines)

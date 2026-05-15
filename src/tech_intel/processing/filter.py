@@ -20,6 +20,8 @@ def score_event(event: RawEvent, config: FilterConfig) -> float:
         return _score_news(event)
     elif event.source_type == SourceType.PAPER:
         return _score_paper(event)
+    elif event.source_type == SourceType.FINANCE:
+        return _score_finance(event)
     return 0.0
 
 
@@ -52,6 +54,10 @@ def _score_news(event: RawEvent) -> float:
 
 
 def _score_paper(event: RawEvent) -> float:
+    return 0.3
+
+
+def _score_finance(event: RawEvent) -> float:
     return 0.3
 
 

@@ -130,7 +130,7 @@ def cli():
     )
     parser = argparse.ArgumentParser(description="補充缺少摘要的事件")
     parser.add_argument("date", help="日期，例如 2026-05-15")
-    parser.add_argument("source", choices=["github", "news", "paper"], help="來源類別")
+    parser.add_argument("source", choices=["github", "news", "paper", "finance"], help="來源類別")
     args = parser.parse_args()
     count = retry_summary(args.date, args.source)
     print(f"更新 {count} 筆")

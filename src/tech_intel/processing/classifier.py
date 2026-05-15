@@ -26,6 +26,8 @@ def classify(event: RawEvent) -> ClassifiedEvent:
         return _classify_news(event)
     elif event.source_type == SourceType.PAPER:
         return _classify_paper(event)
+    elif event.source_type == SourceType.FINANCE:
+        return _classify_finance(event)
     return ClassifiedEvent(**event.model_dump(), classification="Other", significance_score=0.0)
 
 
@@ -61,6 +63,16 @@ def _classify_paper(event: RawEvent) -> ClassifiedEvent:
     return ClassifiedEvent(
         **event.model_dump(),
         classification="Paper",
+        significance_score=sig_score,
+    )
+
+
+def _classify_finance(event: RawEvent) -> ClassifiedEvent:
+    _filter_config = FilterConfig()
+    sig_score = score_event(event, _filter_config)
+    return ClassifiedEvent(
+        **event.model_dump(),
+        classification="Finance",
         significance_score=sig_score,
     )
 

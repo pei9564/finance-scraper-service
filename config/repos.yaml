@@ -1,12 +1,47 @@
 repos:
+  # --- Inference / Serving ---
   - owner: huggingface
     name: text-embeddings-inference
   - owner: vllm-project
     name: vllm
-  # - owner: NVIDIA
-  #   name: NemoClaw
-  # - owner: openclaw
-  #   name: openclaw
+  - owner: ollama
+    name: ollama
+  - owner: ggerganov
+    name: llama.cpp
+
+  # --- ML Frameworks ---
+  - owner: huggingface
+    name: transformers
+  - owner: pytorch
+    name: pytorch
+
+  # --- Fine-tuning / Training ---
+  - owner: unslothai
+    name: unsloth
+  - owner: huggingface
+    name: trl
+
+  # --- Orchestration / Agents ---
+  - owner: langchain-ai
+    name: langchain
+  - owner: langchain-ai
+    name: langgraph
+  - owner: BerriAI
+    name: litellm
+  - owner: microsoft
+    name: autogen
+
+  # --- Vector DB ---
+  - owner: qdrant
+    name: qdrant
+  - owner: chroma-core
+    name: chroma
+
+  # --- SDKs ---
+  - owner: openai
+    name: openai-python
+  - owner: anthropics
+    name: anthropic-sdk-python
 
 news:
   hackernews_enabled: true
@@ -17,6 +52,25 @@ news:
       url: "https://techcrunch.com/category/artificial-intelligence/feed/"
     - name: "The Verge AI"
       url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+
+finance:
+  rss_feeds:
+    # 台股 / 中文財經
+    - name: "自由時報 財經"
+      url: "https://news.ltn.com.tw/rss/business.xml"
+    - name: "ETtoday 財經"
+      url: "https://feeds.feedburner.com/ettoday/finance"
+    - name: "經濟日報 國際"
+      url: "https://money.udn.com/rssfeed/news/1001/5588/5599?ch=money"
+    - name: "經濟日報 焦點"
+      url: "https://money.udn.com/rssfeed/news/1001/5591/5612?ch=money"
+    # 美股 / 國際財經
+    - name: "CNBC Top News"
+      url: "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+    - name: "MarketWatch Top Stories"
+      url: "https://feeds.content.dowjones.io/public/rss/mw_topstories"
+    - name: "Yahoo Finance"
+      url: "https://finance.yahoo.com/news/rssindex"
 
 papers:
   arxiv_categories:
@@ -45,7 +99,7 @@ filters:
   min_reactions: 0
   min_comments_for_issue: 3
   min_comments_for_pr: 2
-  lookback_days: 1
+  lookback_days: 30
   include_labels:
     - "breaking change"
     - "breaking-change"
@@ -78,6 +132,13 @@ ai:
         避免專業術語；若必須使用術語，請順帶用一句話解釋它的意思，
         必要時可用生活化的比喻幫助理解。
         只輸出摘要本身，不要開場白、結語或 markdown 符號。
+    finance:
+      max_tokens: 600
+      instruction: |
+        請用繁體中文，以大約 150-200 字摘要以下財經新聞的重點，
+        涵蓋：事件本身、影響的市場/標的、可能的後續影響或意涵。
+        若新聞內含具體數字（漲跌幅、價位、成交量、利率等）請保留。
+        只輸出摘要本身，不要開場白、結語、條列符號或 markdown 符號。
 
 telegram:
   max_events_per_message: 10
@@ -89,9 +150,12 @@ sources:
     enabled: true
     steps: []
   news:
-    enabled: true
+    enabled: false
     steps: [summarize]
   paper:
+    enabled: false
+    steps: [summarize]
+  finance:
     enabled: true
     steps: [summarize]
 

@@ -53,6 +53,11 @@ class NewsConfig(BaseModel):
     rss_feeds: list[RSSFeedConfig] = Field(default_factory=list)
 
 
+class FinanceConfig(BaseModel):
+    """財經來源 — 純 RSS（無 HN），鏡像 NewsConfig 的 rss_feeds 欄位以共用 RSS 解析。"""
+    rss_feeds: list[RSSFeedConfig] = Field(default_factory=list)
+
+
 class PaperConfig(BaseModel):
     arxiv_categories: list[str] = Field(default_factory=lambda: ["cs.AI", "cs.CL", "cs.LG"])
     arxiv_fetch_limit: int = 200   # 送 LLM 前最多抓幾篇（去重後）
@@ -78,6 +83,7 @@ DEFAULT_SOURCES: dict[str, SourceConfig] = {
     "github": SourceConfig(enabled=True, steps=[]),
     "news": SourceConfig(enabled=True, steps=["summarize"]),
     "paper": SourceConfig(enabled=True, steps=["summarize"]),
+    "finance": SourceConfig(enabled=True, steps=["summarize"]),
 }
 DEFAULT_OUTPUTS: dict[str, OutputConfig] = {
     "web": OutputConfig(enabled=True),
@@ -90,6 +96,7 @@ class AppConfig(BaseModel):
     repos: list[RepoConfig]
     news: NewsConfig = Field(default_factory=NewsConfig)
     papers: PaperConfig = Field(default_factory=PaperConfig)
+    finance: FinanceConfig = Field(default_factory=FinanceConfig)
     filters: FilterConfig = Field(default_factory=FilterConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)

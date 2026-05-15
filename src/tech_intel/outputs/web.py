@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 
 from tech_intel.domain import SummarizedEvent
+from tech_intel.storage.bookmarks import compute_uid
 
 from .site_generator import generate_site, prune_old
 
@@ -15,8 +16,10 @@ KEEP_DAYS = 30
 
 
 def _event_to_dict(e: SummarizedEvent) -> dict:
+    source = e.source_type.value
     return {
-        "source": e.source_type.value,
+        "uid": compute_uid(source, e.url),
+        "source": source,
         "repo": e.repo_full_name,
         "type": e.event_type.value,
         "classification": e.classification,

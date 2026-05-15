@@ -8,6 +8,7 @@ class SourceType(str, Enum):
     GITHUB = "github"
     NEWS = "news"
     PAPER = "paper"
+    FINANCE = "finance"
 
 
 class EventType(str, Enum):

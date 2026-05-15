@@ -20,6 +20,7 @@ dependencies = [
 tech-intel = "tech_intel.main:cli"
 tech-intel-server = "tech_intel.server:cli"
 tech-intel-retry = "tech_intel.retry:cli"
+tech-intel-monthly = "tech_intel.monthly:cli"
 
 [dependency-groups]
 dev = [

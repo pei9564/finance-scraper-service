@@ -14,6 +14,7 @@ from tech_intel.domain import AppConfig, Secrets, SourceType
 from tech_intel.interfaces import LLMGateway, ProcessingStep, SourceCollector
 
 from .base import SourceUnit
+from .finance import FinanceCollector
 from .github import GitHubCollector
 from .news import NewsCollector
 from .paper import PaperCollector
@@ -34,6 +35,7 @@ COLLECTOR_FACTORIES: dict[str, Callable[[BuildDeps], SourceCollector]] = {
     "github": lambda d: GitHubCollector(d.secrets.github_token, d.config.repos, d.lookback),
     "news": lambda d: NewsCollector(d.config.news, d.lookback),
     "paper": lambda d: PaperCollector(d.config.papers, d.lookback, d.llm),
+    "finance": lambda d: FinanceCollector(d.config.finance, d.lookback),
 }
 
 STEP_FACTORIES: dict[str, Callable[[BuildDeps], ProcessingStep]] = {

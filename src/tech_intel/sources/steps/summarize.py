@@ -34,9 +34,19 @@ def _build_paper_head(event: ClassifiedEvent) -> str:
     )
 
 
+def _build_finance_head(event: ClassifiedEvent) -> str:
+    body = (event.body or "")[:3000]
+    return (
+        f"財經新聞標題：{event.title}\n"
+        f"來源：{event.feed_name}\n"
+        f"內文：{body}"
+    )
+
+
 _HEAD_BUILDERS: dict[SourceType, Callable[[ClassifiedEvent], str]] = {
     SourceType.NEWS: _build_news_head,
     SourceType.PAPER: _build_paper_head,
+    SourceType.FINANCE: _build_finance_head,
 }
 
 
