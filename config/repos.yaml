@@ -56,10 +56,6 @@ news:
 finance:
   rss_feeds:
     # 台股 / 中文財經
-    - name: "自由時報 財經"
-      url: "https://news.ltn.com.tw/rss/business.xml"
-    - name: "ETtoday 財經"
-      url: "https://feeds.feedburner.com/ettoday/finance"
     - name: "經濟日報 國際"
       url: "https://money.udn.com/rssfeed/news/1001/5588/5599?ch=money"
     - name: "經濟日報 焦點"
