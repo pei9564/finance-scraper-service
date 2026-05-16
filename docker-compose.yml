@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    container_name: tech-intel
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      # 容器內無法用 localhost 連到 host 上的 vLLM gateway。
+      # 若 .env 沒設 VLLM_BASE_URL，用 host.docker.internal 指回 host。
+      VLLM_BASE_URL: ${VLLM_BASE_URL:-http://host.docker.internal:8000/v1}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./config:/app/config:ro

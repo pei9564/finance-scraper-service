@@ -1,3 +1,3 @@
-from .db import get_conn, init_schema
+from .db import close_pool, get_pool, init_schema, run_sync
 
-__all__ = ["get_conn", "init_schema"]
+__all__ = ["close_pool", "get_pool", "init_schema", "run_sync"]

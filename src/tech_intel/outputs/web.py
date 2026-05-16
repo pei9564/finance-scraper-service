@@ -1,14 +1,16 @@
-"""WebOutput - 寫出每日 JSON artifact 並產生靜態網頁。"""
+"""WebOutput — 把每日事件寫入 PG。
+
+寫入後順手清掉超過 KEEP_DAYS 的舊資料，避免無限增長。靜態網頁
+由 server.py 直接從 PG 動態渲染，不再需要產生 manifest/index。
+"""
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
+from datetime import date, timedelta
 
 from tech_intel.domain import SummarizedEvent
+from tech_intel.storage import daily
 from tech_intel.storage.bookmarks import compute_uid
-
-from .site_generator import generate_site, prune_old
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,6 @@ def _event_to_dict(e: SummarizedEvent) -> dict:
         "body": e.body,
         "tags": e.tags,
         "migration_steps": e.migration_steps,
-        # source-specific display fields
         "feed_name": e.feed_name,
         "score": e.score,
         "authors": e.authors,
@@ -43,8 +44,9 @@ def _event_to_dict(e: SummarizedEvent) -> dict:
 class WebOutput:
     name = "web"
 
-    def __init__(self, output_dir: Path):
-        self.output_dir = output_dir
+    def __init__(self, *_args, **_kwargs):
+        # 簽名相容 registry 仍會傳 output_dir，但實際走 PG，不用該參數
+        pass
 
     async def write(
         self,
@@ -52,19 +54,10 @@ class WebOutput:
         daily_summary: str,
         day_str: str,
     ) -> None:
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = self.output_dir / f"{day_str}.json"
+        await daily.upsert_run(day_str, daily_summary, [_event_to_dict(e) for e in events])
+        logger.info(f"日報寫入 PG：{day_str}（{len(events)} 筆事件）")
 
-        data = {
-            "date": day_str,
-            "daily_summary": daily_summary,
-            "events": [_event_to_dict(e) for e in events],
-        }
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        logger.info(f"JSON artifact 寫入：{output_path}")
-
-        prune_old(self.output_dir, keep_days=KEEP_DAYS)
-        # index.html 放到兩層上的專案根目錄，從根目錄 serve 時可直接存取
-        site_root = self.output_dir.parent.parent
-        generate_site(self.output_dir, site_root=site_root)
+        cutoff = date.today() - timedelta(days=KEEP_DAYS)
+        removed = await daily.prune_before(cutoff)
+        if removed:
+            logger.info(f"清除 {removed} 天超過 {KEEP_DAYS} 天的舊日報")

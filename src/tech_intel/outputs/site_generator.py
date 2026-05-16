@@ -1,19 +1,12 @@
-"""靜態網頁產生器 - 將每日 JSON 包成一個可瀏覽的網頁
-- 左側：日期清單
-- 右側：依 source 切換，檢視當日內容
+"""靜態網頁模板 + 來源 label — 由 server 動態渲染回應。
+
+只保留 HTML template 與 SOURCE_LABELS；資料（日期清單、manifest、events）
+皆由 server 直接查 PG 後組合，不再有靜態檔案生成。
 """
 from __future__ import annotations
 
-import json
-import logging
-import re
-from datetime import date, datetime, timedelta
-from pathlib import Path
-
-logger = logging.getLogger(__name__)
-
-DATE_FILE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.json$")
-MONTH_FILE_RE = re.compile(r"^(\d{4}-\d{2})\.json$")
+# 前端 fetch 每日 JSON 用的 URL 前綴；server 對應路徑 /output/weekly/<date>.json
+DATA_URL_PREFIX = "/output/weekly/"
 
 # 單一事實來源 — 新增 SourceType 時只需在這裡補一筆 label，tab 與徽章
 # 顏色（CSS 端）也會自動套用。
@@ -25,66 +18,9 @@ SOURCE_LABELS: dict[str, str] = {
 }
 
 
-def prune_old(output_dir: Path, keep_days: int = 30) -> None:
-    """刪除超過 keep_days 天的每日 JSON 檔。"""
-    cutoff = date.today() - timedelta(days=keep_days)
-    removed = 0
-    for f in output_dir.glob("*.json"):
-        m = DATE_FILE_RE.match(f.name)
-        if not m:
-            continue
-        try:
-            file_date = datetime.strptime(m.group(1), "%Y-%m-%d").date()
-        except ValueError:
-            continue
-        if file_date < cutoff:
-            f.unlink()
-            removed += 1
-    if removed:
-        logger.info(f"清除 {removed} 筆超過 {keep_days} 天的舊資料")
-
-
-def generate_site(output_dir: Path, site_root: Path | None = None) -> None:
-    """掃描每日 JSON，產生 daily manifest 與 index.html。
-
-    Collection 資料（榜單、收藏…）改由 `/api/collections` 動態提供，不再寫靜態 manifest。
-    site_root: index.html 放置位置（預設與 output_dir 相同）。
-    """
-    output_dir.mkdir(parents=True, exist_ok=True)
-    site_root = site_root or output_dir
-
-    # ── Daily manifest ────────────────────────────────────────────────────
-    dates = []
-    for f in output_dir.glob("*.json"):
-        m = DATE_FILE_RE.match(f.name)
-        if m:
-            dates.append(m.group(1))
-    dates.sort(reverse=True)
-
-    sources_payload = [{"key": k, "label": v} for k, v in SOURCE_LABELS.items()]
-
-    manifest_path = output_dir / "manifest.json"
-    with open(manifest_path, "w", encoding="utf-8") as fp:
-        json.dump(
-            {"dates": dates, "sources": sources_payload},
-            fp, ensure_ascii=False, indent=2,
-        )
-
-    try:
-        rel = output_dir.relative_to(site_root)
-        data_prefix = str(rel).replace("\\", "/") + "/"
-    except ValueError:
-        data_prefix = ""
-
-    index_path = site_root / "index.html"
-    with open(index_path, "w", encoding="utf-8") as fp:
-        fp.write(_build_html(data_prefix))
-
-    logger.info(f"網頁產生完成：{index_path}（{len(dates)} 個日期）")
-
-
-def _build_html(data_prefix: str = "") -> str:
-    return _HTML_TEMPLATE.replace("__DATA_PREFIX__", data_prefix)
+def build_html() -> str:
+    """以 DATA_URL_PREFIX 注入頁面 — 前端據此 fetch 日報 JSON 與 manifest。"""
+    return _HTML_TEMPLATE.replace("__DATA_PREFIX__", DATA_URL_PREFIX)
 
 
 _HTML_TEMPLATE = """<!DOCTYPE html>

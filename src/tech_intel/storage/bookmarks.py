@@ -1,24 +1,23 @@
-"""收藏 CRUD — 純函式介面，呼叫端不需知道 sqlite3。"""
+"""收藏 CRUD — asyncpg 介面，呼叫端不需知道 PG schema。"""
 from __future__ import annotations
 
 import hashlib
-import json
+from datetime import datetime, timezone
 from typing import Any
 
-from .db import get_conn, init_schema
+from .db import get_pool
 
 
 def compute_uid(source: str, url: str) -> str:
     """事件穩定識別 — sha1(source|url)。
 
-    GitHub release URL、新聞 URL 在多次抓取下穩定；用同一公式
-    讓 pipeline 寫 daily JSON 時與前端星號狀態互通。
+    GitHub release URL、新聞 URL 在多次抓取下穩定；pipeline 寫每日事件與
+    前端按星號收藏共用同一公式，得以互通。
     """
     return hashlib.sha1(f"{source}|{url}".encode("utf-8")).hexdigest()
 
 
 def _origin_for(event: dict) -> str:
-    """卡片上「來源欄位」的單一字串表示，方便 list 視圖快速看出出處。"""
     src = event.get("source", "")
     if src == "github":
         return event.get("repo") or ""
@@ -30,93 +29,94 @@ def _origin_for(event: dict) -> str:
     return ""
 
 
-def add(event: dict) -> dict:
+def _to_dt(v) -> datetime:
+    if isinstance(v, datetime):
+        return v
+    dt = datetime.fromisoformat(v)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+async def add(event: dict) -> dict:
     """新增收藏；event 是 daily JSON 的 event 物件（含 uid 欄位較佳）。
 
-    回傳 {"id": int, "uid": str}。已存在則直接回傳原 row 的 id。
+    回傳 {"uid": str, "created": bool}。已存在則 created=False。
     """
-    init_schema()
     uid = event.get("uid") or compute_uid(event.get("source", ""), event.get("url", ""))
-    conn = get_conn()
-    try:
-        cur = conn.execute("SELECT id FROM bookmarks WHERE event_uid = ?", (uid,))
-        existing = cur.fetchone()
-        if existing:
-            return {"id": existing["id"], "uid": uid}
-
-        cur = conn.execute(
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
             """INSERT INTO bookmarks (
                 event_uid, source, title, url, ai_summary, body, origin,
-                classification, impact_level, event_created_at, raw_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                uid,
-                event.get("source", ""),
-                event.get("title", ""),
-                event.get("url", ""),
-                event.get("ai_summary"),
-                event.get("body"),
-                _origin_for(event),
-                event.get("classification"),
-                event.get("impact_level"),
-                event.get("created_at", ""),
-                json.dumps(event, ensure_ascii=False),
-            ),
+                classification, impact_level, event_created_at
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            ON CONFLICT (event_uid) DO NOTHING""",
+            uid,
+            event.get("source", ""),
+            event.get("title", ""),
+            event.get("url", ""),
+            event.get("ai_summary"),
+            event.get("body"),
+            _origin_for(event),
+            event.get("classification"),
+            event.get("impact_level"),
+            _to_dt(event.get("created_at", "")),
         )
-        conn.commit()
-        return {"id": cur.lastrowid, "uid": uid}
-    finally:
-        conn.close()
+    return {"uid": uid, "created": result.endswith(" 1")}
 
 
-def remove(uid: str) -> bool:
-    init_schema()
-    conn = get_conn()
-    try:
-        cur = conn.execute("DELETE FROM bookmarks WHERE event_uid = ?", (uid,))
-        conn.commit()
-        return cur.rowcount > 0
-    finally:
-        conn.close()
+async def remove(uid: str) -> bool:
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute("DELETE FROM bookmarks WHERE event_uid = $1", uid)
+    return result.endswith(" 1")
 
 
-def list_uids() -> set[str]:
+async def list_uids() -> set[str]:
     """頁面載入時拉一份 — 前端用來決定每張卡的 ⭐ 是否實心。"""
-    init_schema()
-    conn = get_conn()
-    try:
-        cur = conn.execute("SELECT event_uid FROM bookmarks")
-        return {row["event_uid"] for row in cur.fetchall()}
-    finally:
-        conn.close()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT event_uid FROM bookmarks")
+    return {r["event_uid"] for r in rows}
 
 
-def months() -> list[str]:
+async def months() -> list[str]:
     """已有收藏的月份清單（依 bookmarked_at），新→舊。"""
-    init_schema()
-    conn = get_conn()
-    try:
-        cur = conn.execute(
-            "SELECT DISTINCT substr(bookmarked_at, 1, 7) AS m FROM bookmarks ORDER BY m DESC"
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT DISTINCT to_char(bookmarked_at, 'YYYY-MM') AS m "
+            "FROM bookmarks ORDER BY m DESC"
         )
-        return [row["m"] for row in cur.fetchall()]
-    finally:
-        conn.close()
+    return [r["m"] for r in rows]
 
 
-def list_by_month(yyyy_mm: str) -> list[dict[str, Any]]:
-    """該月所有收藏，新→舊。回傳直接 JSON 序列化用。"""
-    init_schema()
-    conn = get_conn()
-    try:
-        cur = conn.execute(
+async def list_by_month(yyyy_mm: str) -> list[dict[str, Any]]:
+    """該月所有收藏，新→舊。回傳給 JSON 序列化用。"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
             """SELECT event_uid, source, title, url, ai_summary, body, origin,
                       classification, impact_level, event_created_at, bookmarked_at
                FROM bookmarks
-               WHERE substr(bookmarked_at, 1, 7) = ?
+               WHERE to_char(bookmarked_at, 'YYYY-MM') = $1
                ORDER BY bookmarked_at DESC""",
-            (yyyy_mm,),
+            yyyy_mm,
         )
-        return [dict(row) for row in cur.fetchall()]
-    finally:
-        conn.close()
+    return [
+        {
+            "event_uid": r["event_uid"],
+            "source": r["source"],
+            "title": r["title"],
+            "url": r["url"],
+            "ai_summary": r["ai_summary"],
+            "body": r["body"],
+            "origin": r["origin"],
+            "classification": r["classification"],
+            "impact_level": r["impact_level"],
+            "event_created_at": r["event_created_at"].isoformat(),
+            "bookmarked_at": r["bookmarked_at"].isoformat(),
+        }
+        for r in rows
+    ]
