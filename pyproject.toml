@@ -23,6 +23,7 @@ finance-scraper = "finance_scraper.main:cli"
 finance-scraper-server = "finance_scraper.server:cli"
 finance-scraper-retry = "finance_scraper.retry:cli"
 finance-scraper-monthly = "finance_scraper.monthly:cli"
+finance-scraper-releases = "finance_scraper.releases:cli"
 
 [dependency-groups]
 dev = [

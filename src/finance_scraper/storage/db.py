@@ -95,6 +95,21 @@ CREATE TABLE IF NOT EXISTS monthly_digests (
   generated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (collection_key, month)
 );
+
+CREATE TABLE IF NOT EXISTS github_releases (
+  uid           TEXT PRIMARY KEY,
+  repo          TEXT NOT NULL,
+  tag           TEXT NOT NULL,
+  name          TEXT NOT NULL,
+  url           TEXT NOT NULL,
+  body          TEXT,
+  ai_summary    TEXT,
+  is_prerelease BOOLEAN NOT NULL DEFAULT FALSE,
+  published_at  TIMESTAMPTZ NOT NULL,
+  collected_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS github_releases_repo_idx ON github_releases(repo);
+CREATE INDEX IF NOT EXISTS github_releases_published_at_idx ON github_releases(published_at DESC);
 """
 
 

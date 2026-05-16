@@ -137,11 +137,19 @@ ai:
         涵蓋：事件本身、影響的市場/標的、可能的後續影響或意涵。
         若新聞內含具體數字（漲跌幅、價位、成交量、利率等）請保留。
         只輸出摘要本身，不要開場白、結語、條列符號或 markdown 符號。
+    release:
+      max_tokens: 500
+      instruction: |
+        請用繁體中文，以大約 150 字摘要以下 GitHub release notes 的重點，
+        聚焦在「這版改了什麼」、是否有破壞性更新（breaking changes）、
+        對使用者的影響。若 release notes 含明確的 bug fix / new feature
+        條列請挑 2-3 個最重要的提到。
+        只輸出摘要本身，不要開場白、結語或 markdown 符號。
 
 # 各來源的開關與逐則處理步驟鏈（步驟名稱對應 sources/registry.py 的 STEP_FACTORIES）
 sources:
   github:
-    enabled: true
+    enabled: false  # release 走獨立 pipeline (finance-scraper-releases),不再混入 daily
     steps: []
   news:
     enabled: true

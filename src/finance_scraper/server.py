@@ -23,7 +23,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from finance_scraper.outputs.site_generator import DATA_URL_PREFIX, SOURCE_LABELS, build_html
-from finance_scraper.storage import bookmarks, close_pool, daily, digests, init_schema, trending
+from finance_scraper.storage import bookmarks, close_pool, daily, digests, init_schema, releases as releases_store, trending
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,8 @@ _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 COLLECTIONS_REGISTRY: list[dict] = [
     {"key": "trending-repos", "label": "🚀 熱門 AI Repo",
      "type": "monthly-list", "backend": "trending"},
+    {"key": "releases",       "label": "📦 GitHub Releases",
+     "type": "releases",      "backend": "releases"},
     {"key": "bookmarks",      "label": "⭐ 我的收藏",
      "type": "bookmarks",     "backend": "bookmarks"},
 ]
@@ -49,6 +51,8 @@ _run_lock = asyncio.Lock()
 _run_state: dict = {"running": False, "date": None, "mode": None, "error": None}
 _monthly_lock = asyncio.Lock()
 _monthly_state: dict = {"running": False, "month": None, "error": None}
+_releases_lock = asyncio.Lock()
+_releases_state: dict = {"running": False, "lookback": None, "error": None}
 
 
 # ── lifespan / app ──────────────────────────────────────────────────────────
@@ -98,6 +102,8 @@ async def _collection_months(coll: dict) -> list[str]:
         return await trending.list_months()
     if coll["backend"] == "bookmarks":
         return await bookmarks.months()
+    if coll["backend"] == "releases":
+        return []  # releases 不依月份分頁,前端直接 fetch /api/collections/releases
     return []
 
 
@@ -127,6 +133,15 @@ async def get_collection_month(key: str, month: str):
         items = await bookmarks.list_by_month(month)
         return _no_cache_json({"month": month, "count": len(items), "items": items})
     raise HTTPException(404, "未知 backend")
+
+
+@app.get("/api/collections/releases")
+async def get_releases_collection(days: int = 180):
+    """回傳近 N 天 releases,前端負責依 repo 分組與排序。"""
+    if days < 1 or days > 3650:
+        raise HTTPException(400, "days 必須在 1..3650")
+    items = await releases_store.list_recent(days=days)
+    return _no_cache_json({"days": days, "count": len(items), "items": items})
 
 
 @app.get("/api/collections/bookmarks/{month}/digest")
@@ -229,6 +244,24 @@ async def post_run_monthly():
     return _no_cache_json({"started": True, "month": month})
 
 
+@app.get("/api/releases-status")
+async def get_releases_status():
+    async with _releases_lock:
+        return _no_cache_json(dict(_releases_state))
+
+
+@app.post("/api/run-releases")
+async def post_run_releases(lookback: int = 180):
+    if lookback < 1 or lookback > 3650:
+        raise HTTPException(400, "lookback 必須在 1..3650")
+    async with _releases_lock:
+        if _releases_state["running"]:
+            raise HTTPException(409, "releases pipeline 正在執行中")
+        _releases_state.update(running=True, lookback=lookback, error=None)
+    asyncio.create_task(_run_releases_task(lookback))
+    return _no_cache_json({"started": True, "lookback": lookback})
+
+
 # ── helpers ─────────────────────────────────────────────────────────────────
 def _no_cache_json(payload) -> JSONResponse:
     return JSONResponse(content=payload, headers={"Cache-Control": "no-cache"})
@@ -275,6 +308,17 @@ async def _run_monthly_task() -> None:
     except Exception as e:
         async with _monthly_lock:
             _monthly_state.update(running=False, error=str(e))
+
+
+async def _run_releases_task(lookback: int) -> None:
+    from finance_scraper.releases import run_releases
+    try:
+        await run_releases(lookback_days=lookback)
+        async with _releases_lock:
+            _releases_state.update(running=False, error=None)
+    except Exception as e:
+        async with _releases_lock:
+            _releases_state.update(running=False, error=str(e))
 
 
 async def _generate_bookmark_digest(month: str) -> dict:

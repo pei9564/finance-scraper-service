@@ -129,6 +129,14 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   #collection-status { font-size: 12px; color: #8b949e; margin-bottom: 12px; min-height: 18px; }
   #collection-status.running { color: #e3b341; }
   #collection-status.error { color: #f85149; }
+
+  /* ── releases ── */
+  .release-group { margin-bottom: 28px; }
+  .release-repo { font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 8px;
+    padding-bottom: 6px; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 8px; }
+  .release-repo a { color: #f0f6fc; }
+  .release-count { font-size: 12px; color: #8b949e; font-weight: 400; }
+  select.collection-action-btn { background: #161b22; }
 </style>
 </head>
 <body>
@@ -185,7 +193,10 @@ let COLLECTIONS = [];
 const COLLECTION_RENDERERS = {
   "monthly-list": renderMonthlyRepos,
   "bookmarks": renderBookmarks,
+  "releases": renderReleases,
 };
+// releases 時間範圍下拉的當前值;切換 collection 時保留
+let currentReleasesDays = 180;
 // 已收藏 UID 集合 — 載入後決定每張卡的 ⭐ 是否實心
 let BOOKMARKED_UIDS = new Set();
 let mode = "daily";
@@ -196,6 +207,7 @@ let currentCollection = null;       // collection 物件
 let currentCollectionMonth = null;  // 'YYYY-MM'
 let pollTimer = null;
 let monthlyPollTimer = null;
+let releasesPollTimer = null;
 
 // ── mode toggle ───────────────────────────────────────────────────────────
 function setMode(m) {
@@ -216,6 +228,7 @@ async function init() {
   await initCollections();
   pollStatus();
   pollMonthlyStatus();
+  pollReleasesStatus();
 }
 
 async function loadBookmarkUids() {
@@ -303,6 +316,10 @@ async function selectCollection(c) {
   document.getElementById("collection-subtitle").textContent = _collectionSubtitle(c);
   renderCollectionActions();
   renderCollectionMonthList();
+  if (c.type === "releases") {
+    await loadReleases(currentReleasesDays);
+    return;
+  }
   if ((c.months || []).length) {
     await selectCollectionMonth(c.months[0]);
   } else {
@@ -332,20 +349,31 @@ function renderCollectionEmpty(msg) {
 function _collectionSubtitle(c) {
   if (c.key === "trending-repos") return "近半年內新建立、具 AI 相關 topic 的 repo，依 star 數排序";
   if (c.key === "bookmarks") return "你在日報上收藏的內容，依月份分組";
+  if (c.key === "releases") return "追蹤 repo 的 release,依 repo 分組、近期在上";
   return "";
 }
 
 function _collectionEmptyHint(c) {
   if (c.key === "trending-repos") return "尚無資料，點右上「更新本月熱門」開始收集";
   if (c.key === "bookmarks") return "尚無收藏，去日報點 ⭐ 加入";
+  if (c.key === "releases") return "尚無資料,點右上「更新 releases」開始收集";
   return "本 collection 尚無資料";
 }
 
 function renderCollectionActions() {
   const el = document.getElementById("collection-actions");
-  if (currentCollection && currentCollection.key === "trending-repos") {
+  if (!currentCollection) { el.innerHTML = ""; return; }
+  if (currentCollection.key === "trending-repos") {
     el.innerHTML = `<button class="collection-action-btn" id="run-monthly-btn"
       onclick="runMonthly()">⚡ 更新本月熱門</button>`;
+  } else if (currentCollection.key === "releases") {
+    const days = [30, 90, 180, 365];
+    const opts = days.map(d => `<option value="${d}"${d === currentReleasesDays ? " selected" : ""}>近 ${d} 天</option>`).join("");
+    el.innerHTML = `
+      <select id="releases-days" class="collection-action-btn"
+        onchange="changeReleasesDays(this.value)">${opts}</select>
+      <button class="collection-action-btn" id="run-releases-btn"
+        onclick="runReleases()">⚡ 更新 releases</button>`;
   } else {
     el.innerHTML = "";
   }
@@ -575,6 +603,125 @@ function updateMonthlyStatus(s) {
   } else {
     el.className = ""; el.textContent = "";
     if (btn) btn.disabled = false;
+  }
+}
+
+// ── releases: data flow ───────────────────────────────────────────────────
+async function loadReleases(days) {
+  try {
+    const res = await fetch(`/api/collections/releases?days=${days}&_=${Date.now()}`);
+    if (!res.ok) { renderCollectionEmpty("載入失敗"); return; }
+    renderReleases(await res.json());
+  } catch (e) { renderCollectionEmpty("載入失敗:" + e.message); }
+}
+
+function changeReleasesDays(v) {
+  currentReleasesDays = parseInt(v, 10) || 180;
+  loadReleases(currentReleasesDays);
+}
+
+function renderReleases(data) {
+  const el = document.getElementById("collection-content");
+  const items = data.items || [];
+  if (!items.length) {
+    el.innerHTML = `<div class="empty">近 ${data.days} 天無 release</div>`;
+    return;
+  }
+  // 依 repo 分組,組內已是 published_at 倒序
+  const groups = new Map();
+  for (const it of items) {
+    if (!groups.has(it.repo)) groups.set(it.repo, []);
+    groups.get(it.repo).push(it);
+  }
+  const header = `<div style="font-size:12px;color:#8b949e;margin-bottom:16px">
+    共 ${items.length} 筆 release,涵蓋 ${groups.size} 個 repo,近 ${data.days} 天
+  </div>`;
+  const parts = [];
+  for (const [repo, rels] of groups.entries()) {
+    parts.push(`<div class="release-group">
+      <div class="release-repo">📦 <a href="https://github.com/${esc(repo)}" target="_blank">${esc(repo)}</a>
+        <span class="release-count">${rels.length} 個</span></div>
+      ${rels.map(releaseCardHtml).join("")}
+    </div>`);
+  }
+  el.innerHTML = header + parts.join("");
+}
+
+function releaseCardHtml(r) {
+  const date = (r.published_at || "").slice(0, 10);
+  const pre = r.is_prerelease ? `<span class="badge" style="background:#f8514933;color:#ff7b72">pre-release</span>` : "";
+  const tag = r.tag ? `<span class="badge">${esc(r.tag)}</span>` : "";
+  const summary = r.ai_summary
+    ? `<div class="card-summary">${esc(r.ai_summary)}</div>`
+    : r.body ? `<div class="card-summary card-body-preview">${esc(r.body.slice(0, 280))}…</div>` : "";
+  return `<div class="card">
+    <div class="card-meta">
+      ${tag}
+      ${pre}
+      <span style="color:#8b949e">📅 ${date}</span>
+    </div>
+    <div class="card-title"><a href="${esc(r.url)}" target="_blank">${esc(r.name)}</a></div>
+    ${summary}
+  </div>`;
+}
+
+// ── releases: run & polling ───────────────────────────────────────────────
+async function runReleases() {
+  updateReleasesStatus({ running: true, lookback: currentReleasesDays });
+  try {
+    const res = await fetch(`/api/run-releases?lookback=${currentReleasesDays}`, { method: "POST" });
+    const j = await res.json();
+    if (!res.ok) { updateReleasesStatus({ running: false, error: j.error || "失敗" }); return; }
+    startReleasesPolling();
+  } catch {
+    updateReleasesStatus({ running: false, error: "無法連線" });
+  }
+}
+
+async function pollReleasesStatus() {
+  try {
+    const res = await fetch("/api/releases-status");
+    if (!res.ok) return;
+    const s = await res.json();
+    updateReleasesStatus(s);
+    if (s.running) startReleasesPolling();
+  } catch {}
+}
+
+function startReleasesPolling() {
+  if (releasesPollTimer) return;
+  releasesPollTimer = setInterval(async () => {
+    try {
+      const s = await (await fetch("/api/releases-status")).json();
+      updateReleasesStatus(s);
+      if (!s.running) {
+        stopReleasesPolling();
+        if (currentCollection && currentCollection.key === "releases") {
+          await loadReleases(currentReleasesDays);
+        }
+      }
+    } catch { stopReleasesPolling(); }
+  }, 3000);
+}
+
+function stopReleasesPolling() {
+  if (releasesPollTimer) { clearInterval(releasesPollTimer); releasesPollTimer = null; }
+}
+
+function updateReleasesStatus(s) {
+  const el = document.getElementById("collection-status");
+  const btn = document.getElementById("run-releases-btn");
+  if (s.running) {
+    el.className = "running"; el.textContent = `⚡ 收集 releases (近 ${s.lookback || "?"} 天)...`;
+    if (btn) btn.disabled = true;
+  } else if (s.error) {
+    el.className = "error"; el.textContent = `❌ 失敗:${s.error}`;
+    if (btn) btn.disabled = false;
+  } else {
+    if (btn) btn.disabled = false;
+    if (el.textContent.startsWith("⚡ 收集 releases")) {
+      el.className = ""; el.textContent = "";
+    }
   }
 }
 
