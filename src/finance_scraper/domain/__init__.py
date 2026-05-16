@@ -16,7 +16,6 @@ from .enums import EventType, ImpactLevel, SourceType
 from .events import (
     ClassifiedEvent,
     RawEvent,
-    RawGitHubEvent,
     RawNewsEvent,
     RawPaperEvent,
     SummarizedEvent,
@@ -40,7 +39,6 @@ __all__ = [
     "SourceType",
     "ClassifiedEvent",
     "RawEvent",
-    "RawGitHubEvent",
     "RawNewsEvent",
     "RawPaperEvent",
     "SummarizedEvent",

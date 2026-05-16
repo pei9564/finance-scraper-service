@@ -94,19 +94,7 @@ papers:
   hf_top_n: 5
 
 filters:
-  min_reactions: 0
-  min_comments_for_issue: 3
-  min_comments_for_pr: 2
   lookback_days: 30
-  include_labels:
-    - "breaking change"
-    - "breaking-change"
-    - "type: breaking change"
-    - "security"
-    - "vulnerability"
-    - "bug"
-    - "enhancement"
-    - "feature"
 
 ai:
   # 內部 LLM gateway（OpenAI 相容）；真實位址/金鑰用 .env 的 VLLM_* 覆蓋
@@ -148,9 +136,6 @@ ai:
 
 # 各來源的開關與逐則處理步驟鏈（步驟名稱對應 sources/registry.py 的 STEP_FACTORIES）
 sources:
-  github:
-    enabled: false  # release 走獨立 pipeline (finance-scraper-releases),不再混入 daily
-    steps: []
   news:
     enabled: true
     steps: [translate, fetch_body, summarize]

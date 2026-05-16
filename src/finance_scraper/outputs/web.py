@@ -22,7 +22,7 @@ def _event_to_dict(e: SummarizedEvent) -> dict:
     return {
         "uid": compute_uid(source, e.url),
         "source": source,
-        "repo": e.repo_full_name,
+        "repo": None,  # github 來源已移除,events.repo 欄位保留供未來擴充
         "type": e.event_type.value,
         "classification": e.classification,
         "title": e.title,

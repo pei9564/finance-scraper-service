@@ -11,7 +11,6 @@ DATA_URL_PREFIX = "/output/weekly/"
 # 單一事實來源 — 新增 SourceType 時只需在這裡補一筆 label，tab 與徽章
 # 顏色（CSS 端）也會自動套用。
 SOURCE_LABELS: dict[str, str] = {
-    "github": "🔔 GitHub",
     "news": "📰 新聞",
     "paper": "📄 論文",
     "finance": "💰 財經",
@@ -96,7 +95,6 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .card-meta { font-size: 12px; color: #8b949e; margin-bottom: 6px;
                display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .badge { background: #21262d; border-radius: 4px; padding: 2px 8px; font-size: 11px; }
-  .badge.src-github { background: #1f6feb33; color: #58a6ff; }
   .badge.src-news { background: #d2992233; color: #e3b341; }
   .badge.src-paper { background: #3fb95033; color: #56d364; }
   .badge.src-finance { background: #39c5cf33; color: #39c5cf; }
@@ -769,8 +767,7 @@ function esc(s) {
 
 function cardHtml(e) {
   let origin = "";
-  if (e.source === "github") origin = esc(e.repo || "");
-  else if (e.source === "news") origin = esc(e.feed_name || "");
+  if (e.source === "news") origin = esc(e.feed_name || "");
   else if (e.source === "paper") origin = esc((e.categories || []).slice(0, 2).join(", "));
   else if (e.source === "finance") origin = esc(e.feed_name || "");
   const noSummary = !e.ai_summary && (e.source === "news" || e.source === "paper" || e.source === "finance");
@@ -846,7 +843,7 @@ function renderBookmarks(data) {
     const k = it.source || "other";
     (groups[k] = groups[k] || []).push(it);
   });
-  const order = ["github", "news", "paper", "finance", "other"];
+  const order = ["news", "paper", "finance", "other"];
   const sections = order.filter(k => groups[k]).map(k => {
     const label = (SOURCES.find(s => s.key === k) || {}).label || k;
     const cards = groups[k].map(bookmarkCardHtml).join("");

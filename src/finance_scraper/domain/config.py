@@ -15,10 +15,6 @@ class RepoConfig(BaseModel):
 
 
 class FilterConfig(BaseModel):
-    min_reactions: int = 0
-    min_comments_for_issue: int = 3
-    min_comments_for_pr: int = 2
-    include_labels: list[str] = Field(default_factory=list)
     lookback_days: int = 7
 
 
@@ -76,7 +72,6 @@ class OutputConfig(BaseModel):
 
 # 缺 sources: / outputs: 區塊的舊設定檔仍可運作的預設值
 DEFAULT_SOURCES: dict[str, SourceConfig] = {
-    "github": SourceConfig(enabled=True, steps=[]),
     "news": SourceConfig(enabled=True, steps=["summarize"]),
     "paper": SourceConfig(enabled=True, steps=["summarize"]),
     "finance": SourceConfig(enabled=True, steps=["summarize"]),

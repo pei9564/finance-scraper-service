@@ -32,7 +32,6 @@ def _dict_to_event(d: dict) -> SummarizedEvent:
         created_at = created_at.replace(tzinfo=timezone.utc)
     return SummarizedEvent(
         source_type=SourceType(d["source"]),
-        repo_full_name=d.get("repo"),
         event_type=EventType(d.get("type", "Article")),
         classification=d.get("classification"),
         title=d["title"],
@@ -111,7 +110,7 @@ def cli():
     )
     parser = argparse.ArgumentParser(description="補充缺少摘要的事件")
     parser.add_argument("date", help="日期，例如 2026-05-15")
-    parser.add_argument("source", choices=["github", "news", "paper", "finance"], help="來源類別")
+    parser.add_argument("source", choices=["news", "paper", "finance"], help="來源類別")
     args = parser.parse_args()
     count = asyncio.run(retry_summary(args.date, args.source))
     print(f"更新 {count} 筆")

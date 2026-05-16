@@ -5,16 +5,12 @@ from enum import Enum
 
 
 class SourceType(str, Enum):
-    GITHUB = "github"
     NEWS = "news"
     PAPER = "paper"
     FINANCE = "finance"
 
 
 class EventType(str, Enum):
-    RELEASE = "Release"
-    ISSUE = "Issue"
-    PR = "PR"
     ARTICLE = "Article"
     PAPER = "Paper"
 

@@ -1,63 +1,44 @@
-"""測試規則式分類器"""
+"""測試規則式分類器 — 來源 → label 對應。"""
 from datetime import datetime
 
 import pytest
 
-from finance_scraper.domain import EventType, RawGitHubEvent
+from finance_scraper.domain import EventType, RawNewsEvent, RawPaperEvent, SourceType
 from finance_scraper.processing.classifier import classify
 
 
-def make_event(**kwargs) -> RawGitHubEvent:
-    defaults = dict(
-        repo_full_name="test/repo",
-        event_type=EventType.ISSUE,
-        title="Test",
-        url="https://github.com/test/repo/issues/1",
-        created_at=datetime(2026, 3, 25),
-        labels=[],
-        comment_count=0,
-        reactions=0,
+def _news(**kw) -> RawNewsEvent:
+    base = dict(
+        title="T", url="https://example.com/x",
+        created_at=datetime(2026, 5, 15), feed_name="HackerNews", score=10,
     )
-    defaults.update(kwargs)
-    return RawGitHubEvent(**defaults)
+    base.update(kw)
+    return RawNewsEvent(**base)
 
 
-@pytest.mark.parametrize("event_kwargs,expected", [
-    # Release
-    ({"event_type": EventType.RELEASE, "title": "v2.0.0", "body": "Minor improvements"}, "Release"),
-    # Release/Breaking
-    ({"event_type": EventType.RELEASE, "title": "v3.0.0", "body": "Breaking change: removed X"}, "Release/Breaking"),
-    # Breaking label
-    ({"event_type": EventType.ISSUE, "labels": ["breaking change"]}, "Breaking"),
-    ({"event_type": EventType.ISSUE, "labels": ["breaking-change"]}, "Breaking"),
-    # Security
-    ({"event_type": EventType.ISSUE, "labels": ["security"]}, "Security"),
-    ({"event_type": EventType.ISSUE, "labels": ["vulnerability"]}, "Security"),
-    # Performance
-    ({"event_type": EventType.PR, "title": "Improve latency by 30%", "is_merged": True}, "Performance"),
-    ({"event_type": EventType.PR, "title": "perf: optimize batch processing", "is_merged": True}, "Performance"),
-    # Bug
-    ({"event_type": EventType.ISSUE, "labels": ["bug"]}, "Bug"),
-    ({"event_type": EventType.PR, "labels": ["fix"], "is_merged": True}, "Bug"),
-    # Feature
-    ({"event_type": EventType.ISSUE, "labels": ["enhancement"]}, "Feature"),
-    ({"event_type": EventType.PR, "labels": ["feature"], "is_merged": True}, "Feature"),
-    # Merged PR without labels → Feature
-    ({"event_type": EventType.PR, "is_merged": True}, "Feature"),
-    # Other
-    ({"event_type": EventType.ISSUE}, "Other"),
+def _paper(**kw) -> RawPaperEvent:
+    base = dict(
+        title="P", url="https://arxiv.org/abs/2401.0001",
+        created_at=datetime(2026, 5, 15), arxiv_id="2401.0001",
+    )
+    base.update(kw)
+    return RawPaperEvent(**base)
+
+
+@pytest.mark.parametrize("event,label,source_type", [
+    (_news(), "News", SourceType.NEWS),
+    (_paper(), "Paper", SourceType.PAPER),
 ])
-def test_classify(event_kwargs, expected):
-    event = make_event(**event_kwargs)
+def test_classify_assigns_label_by_source(event, label, source_type):
     result = classify(event)
-    assert result.classification == expected, (
-        f"Expected '{expected}', got '{result.classification}' for {event_kwargs}"
-    )
-
-
-def test_classify_preserves_original_fields():
-    event = make_event(title="Original title", labels=["bug"])
-    result = classify(event)
-    assert result.title == "Original title"
-    assert result.labels == ["bug"]
+    assert result.classification == label
+    assert result.source_type == source_type
     assert result.significance_score >= 0.0
+
+
+def test_classify_preserves_event_fields():
+    event = _news(title="Big news", body="content")
+    result = classify(event)
+    assert result.title == "Big news"
+    assert result.body == "content"
+    assert result.event_type == EventType.ARTICLE

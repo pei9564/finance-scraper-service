@@ -5,20 +5,19 @@ import pytest
 
 from finance_scraper.domain import (
     AppConfig, ClassifiedEvent, EventType, ImpactLevel,
-    RawGitHubEvent, RepoConfig, SummarizedEvent,
+    RawNewsEvent, RepoConfig, SummarizedEvent,
 )
 
 
-def make_raw_event(**kwargs) -> RawGitHubEvent:
+def make_raw_event(**kwargs) -> RawNewsEvent:
     defaults = dict(
-        repo_full_name="pydantic/pydantic",
-        event_type=EventType.ISSUE,
-        title="Test issue",
-        url="https://github.com/pydantic/pydantic/issues/1",
+        title="Test article",
+        url="https://example.com/x",
         created_at=datetime(2026, 3, 25),
+        feed_name="HackerNews",
     )
     defaults.update(kwargs)
-    return RawGitHubEvent(**defaults)
+    return RawNewsEvent(**defaults)
 
 
 def test_repo_config_full_name():
@@ -28,26 +27,26 @@ def test_repo_config_full_name():
 
 def test_raw_event_defaults():
     event = make_raw_event()
-    assert event.labels == []
-    assert event.comment_count == 0
-    assert event.is_merged is None
+    assert event.feed_name == "HackerNews"
+    assert event.score == 0
+    assert event.event_type == EventType.ARTICLE
 
 
 def test_classified_event_inherits():
     raw = make_raw_event()
-    classified = ClassifiedEvent(**raw.model_dump(), classification="Bug", significance_score=0.3)
-    assert classified.repo_full_name == raw.repo_full_name
-    assert classified.classification == "Bug"
+    classified = ClassifiedEvent(**raw.model_dump(), classification="News", significance_score=0.3)
+    assert classified.feed_name == raw.feed_name
+    assert classified.classification == "News"
 
 
 def test_summarized_event_inherits():
     raw = make_raw_event()
-    classified = ClassifiedEvent(**raw.model_dump(), classification="Feature", significance_score=0.2)
+    classified = ClassifiedEvent(**raw.model_dump(), classification="News", significance_score=0.2)
     summarized = SummarizedEvent(
         **classified.model_dump(),
         ai_summary="Test summary",
         impact_level=ImpactLevel.MEDIUM,
-        tags=["new-feature"],
+        tags=["topic"],
     )
     assert summarized.ai_summary == "Test summary"
     assert summarized.impact_level == ImpactLevel.MEDIUM
@@ -74,8 +73,9 @@ def test_app_config_parsing():
 
 
 def test_app_config_default_sources_and_outputs():
-    """缺 sources: / outputs: 區塊時，套用內建預設。"""
+    """缺 sources: / outputs: 區塊時,套用內建預設。"""
     config = AppConfig(repos=[{"owner": "a", "name": "b"}])
     assert config.sources["news"].steps == ["summarize"]
-    assert config.sources["github"].enabled is True
+    assert config.sources["news"].enabled is True
+    assert "github" not in config.sources
     assert config.outputs["web"].enabled is True

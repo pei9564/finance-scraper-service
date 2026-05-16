@@ -21,9 +21,9 @@ def _config(**overrides) -> AppConfig:
     base = dict(
         repos=[RepoConfig(owner="a", name="b")],
         sources={
-            "github": SourceConfig(enabled=True, steps=[]),
             "news": SourceConfig(enabled=True, steps=["summarize"]),
             "paper": SourceConfig(enabled=False, steps=["summarize"]),
+            "finance": SourceConfig(enabled=True, steps=["summarize"]),
         },
         outputs={
             "web": OutputConfig(enabled=True),
@@ -36,15 +36,15 @@ def _config(**overrides) -> AppConfig:
 def test_build_source_units_respects_enabled():
     units = build_source_units(_config(), _secrets(), StubGateway(), lookback=1)
     types = {u.source_type for u in units}
-    assert types == {SourceType.GITHUB, SourceType.NEWS}  # paper disabled
+    assert types == {SourceType.NEWS, SourceType.FINANCE}  # paper disabled
     assert SourceType.PAPER not in types
 
 
 def test_build_source_units_maps_step_names():
     units = build_source_units(_config(), _secrets(), StubGateway(), lookback=1)
     by_type = {u.source_type: u for u in units}
-    assert [s.name for s in by_type[SourceType.GITHUB].steps] == []
     assert [s.name for s in by_type[SourceType.NEWS].steps] == ["summarize"]
+    assert [s.name for s in by_type[SourceType.FINANCE].steps] == ["summarize"]
 
 
 def test_build_source_units_skips_unknown_step():
