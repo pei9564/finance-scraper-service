@@ -77,6 +77,26 @@ async def upsert_many(items: Iterable[dict[str, Any]]) -> int:
     return len(rows)
 
 
+async def prune_to_top_n_per_repo(n: int) -> int:
+    """每個 repo 只留最近 n 筆 release(依 published_at),其餘 DELETE。回傳刪除筆數。"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """DELETE FROM github_releases WHERE uid IN (
+                 SELECT uid FROM (
+                   SELECT uid, ROW_NUMBER() OVER (
+                     PARTITION BY repo ORDER BY published_at DESC
+                   ) AS rn FROM github_releases
+                 ) t WHERE rn > $1
+               )""",
+            n,
+        )
+    try:
+        return int(result.split()[-1])
+    except (ValueError, IndexError):
+        return 0
+
+
 async def list_recent(days: int | None = 180) -> list[dict[str, Any]]:
     """回傳近 N 天的 release(依 published_at 倒序);days=None 回全部。"""
     pool = await get_pool()

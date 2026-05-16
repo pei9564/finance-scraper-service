@@ -18,6 +18,10 @@ from finance_scraper.storage.releases import compute_uid
 
 logger = logging.getLogger(__name__)
 
+# 每個 repo 最多保留幾筆 release — 用來擋掉每次 CI build 都發 release 的 repo
+# (例如 ggerganov/llama.cpp 一週可以有幾十個 b\d+ tag),避免淹沒 UI
+MAX_RELEASES_PER_REPO = 10
+
 
 class GitHubReleaseCollector:
     def __init__(self, token: str, repos: list[RepoConfig], lookback_days: int = 180):
@@ -61,6 +65,11 @@ class GitHubReleaseCollector:
                     "is_prerelease": bool(release.prerelease),
                     "published_at": published,
                 })
+                # 已達上限就停止迭代,避免高頻 CI release 浪費 API
+                if len(items) >= MAX_RELEASES_PER_REPO:
+                    break
         except GithubException as e:
             logger.warning(f"[{repo_cfg.full_name}] get_releases 失敗:{e}")
-        return items
+        # 雙保險:倒序後再 cap(get_releases 已是 created_at desc,但 published_at 可能略不同)
+        items.sort(key=lambda it: it["published_at"], reverse=True)
+        return items[:MAX_RELEASES_PER_REPO]

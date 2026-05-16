@@ -19,7 +19,10 @@ from dotenv import load_dotenv
 
 from finance_scraper.domain import AppConfig
 from finance_scraper.infrastructure import LLMGatewayClient
-from finance_scraper.sources.github.release_collector import GitHubReleaseCollector
+from finance_scraper.sources.github.release_collector import (
+    MAX_RELEASES_PER_REPO,
+    GitHubReleaseCollector,
+)
 from finance_scraper.storage import init_schema, releases as releases_store
 
 logger = logging.getLogger(__name__)
@@ -88,7 +91,13 @@ async def run_releases(lookback_days: int = 180) -> int:
             logger.warning(f"LLM gateway 初始化失敗,跳過摘要:{e}")
 
     written = await releases_store.upsert_many(fetched)
-    logger.info(f"✅ release 寫入 PG:{written} 筆(其中 {len(new_items)} 新增)")
+    logger.info(f"release 寫入 PG:{written} 筆(其中 {len(new_items)} 新增)")
+
+    # 收尾 prune:每 repo 只留最近 MAX_RELEASES_PER_REPO 筆,移除歷史殘留
+    pruned = await releases_store.prune_to_top_n_per_repo(MAX_RELEASES_PER_REPO)
+    if pruned:
+        logger.info(f"prune:每 repo 只留 {MAX_RELEASES_PER_REPO} 筆,刪掉 {pruned} 筆舊資料")
+    logger.info("✅ releases pipeline 完成")
     return written
 
 
