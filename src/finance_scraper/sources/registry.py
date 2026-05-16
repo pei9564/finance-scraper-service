@@ -38,10 +38,16 @@ COLLECTOR_FACTORIES: dict[str, Callable[[BuildDeps], SourceCollector]] = {
     "finance": lambda d: FinanceCollector(d.config.finance, d.lookback),
 }
 
+def _non_en_feed_names(config: AppConfig) -> set[str]:
+    """匯整所有非英文 RSS 來源的 feed_name,供 TranslateStep 跳過用。"""
+    feeds = [*config.news.rss_feeds, *config.finance.rss_feeds]
+    return {f.name for f in feeds if f.lang != "en"}
+
+
 STEP_FACTORIES: dict[str, Callable[[BuildDeps], ProcessingStep]] = {
     "fetch_body": lambda d: FetchBodyStep(),
     "summarize": lambda d: SummarizeStep(d.llm, d.config.ai),
-    "translate": lambda d: TranslateStep(d.llm),  # 已註冊，目前 config 未接到任何來源
+    "translate": lambda d: TranslateStep(d.llm, _non_en_feed_names(d.config)),
 }
 
 

@@ -39,6 +39,7 @@ class AIConfig(BaseModel):
 class RSSFeedConfig(BaseModel):
     name: str
     url: str
+    lang: str = "en"  # 預設英文,中文來源(如經濟日報)需顯式設 zh 才會被 TranslateStep 跳過
 
 
 class NewsConfig(BaseModel):

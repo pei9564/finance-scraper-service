@@ -54,13 +54,63 @@ def test_summarize_step_passthrough_when_no_profile():
     assert gateway.calls == []
 
 
-def test_translate_step_is_noop():
-    gateway = StubGateway()
-    step = TranslateStep(gateway)
-    event = _news_event()
+def _en_news_event(feed_name: str = "HackerNews") -> SummarizedEvent:
+    raw = RawNewsEvent(
+        title="OpenAI releases new model",
+        url="https://example.com/a",
+        created_at=datetime(2026, 5, 15),
+        body="...",
+        feed_name=feed_name,
+    )
+    return SummarizedEvent(**raw.model_dump())
 
+
+def test_translate_step_uses_llm():
+    gateway = StubGateway("OpenAI 發表新模型")
+    step = TranslateStep(gateway, skip_feeds=set())
+
+    result = step.apply(_en_news_event())
+
+    assert result.title == "OpenAI 發表新模型"
+    assert len(gateway.calls) == 1
+
+
+def test_translate_step_skips_zh_feed():
+    """中文來源(feed_name 在 skip_feeds 內)應原樣回傳、不呼叫 LLM。"""
+    gateway = StubGateway()
+    step = TranslateStep(gateway, skip_feeds={"經濟日報 焦點"})
+
+    event = _en_news_event(feed_name="經濟日報 焦點")
     result = step.apply(event)
 
-    assert result is event
+    assert result.title == event.title
     assert gateway.calls == []
+
+
+def test_translate_step_falls_back_to_package(monkeypatch):
+    """LLM 拋錯時改用 deep-translator;這裡 monkeypatch 避免真實網路。"""
+    gateway = StubGateway()
+    def boom(*a, **k):
+        raise RuntimeError("gateway down")
+    gateway.chat = boom  # type: ignore[assignment]
+
+    from finance_scraper.sources.steps import translate as translate_mod
+    monkeypatch.setattr(translate_mod, "_translate_via_package", lambda text: "套件譯文")
+
+    step = TranslateStep(gateway, skip_feeds=set())
+    result = step.apply(_en_news_event())
+
+    assert result.title == "套件譯文"
+
+
+def test_translate_step_preserves_title_when_all_fail(monkeypatch):
+    """LLM 與套件皆失敗時,保留原 title、不擋 pipeline。"""
+    from finance_scraper.sources.steps import translate as translate_mod
+    monkeypatch.setattr(translate_mod, "_translate_via_package", lambda text: None)
+
+    step = TranslateStep(llm=None, skip_feeds=set())
+    event = _en_news_event()
+    result = step.apply(event)
+
+    assert result.title == event.title
     assert step.name == "translate"

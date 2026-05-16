@@ -58,8 +58,10 @@ finance:
     # 台股 / 中文財經
     - name: "經濟日報 國際"
       url: "https://money.udn.com/rssfeed/news/1001/5588/5599?ch=money"
+      lang: zh
     - name: "經濟日報 焦點"
       url: "https://money.udn.com/rssfeed/news/1001/5591/5612?ch=money"
+      lang: zh
     # 美股 / 國際財經
     - name: "CNBC Top News"
       url: "https://www.cnbc.com/id/100003114/device/rss/rss.html"
@@ -143,13 +145,13 @@ sources:
     steps: []
   news:
     enabled: true
-    steps: [fetch_body, summarize]
+    steps: [translate, fetch_body, summarize]
   paper:
     enabled: true
-    steps: [summarize]
+    steps: [translate, summarize]
   finance:
     enabled: true
-    steps: [summarize]
+    steps: [translate, summarize]
 
 # 各輸出目標的開關
 outputs:
