@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from tech_intel.domain import (
-    AppConfig, NotionIds, OutputConfig, RepoConfig, Secrets, SourceConfig, SourceType,
+    AppConfig, OutputConfig, RepoConfig, Secrets, SourceConfig, SourceType,
 )
 from tech_intel.outputs.registry import build_output_writers
 from tech_intel.sources.registry import build_source_units
@@ -14,13 +14,7 @@ class StubGateway:
 
 
 def _secrets() -> Secrets:
-    return Secrets(
-        github_token="gh",
-        notion_key="nk",
-        notion_db_ids=NotionIds(activity_logs_db="db"),
-        telegram_token="tg",
-        telegram_chat_id="chat",
-    )
+    return Secrets(github_token="gh")
 
 
 def _config(**overrides) -> AppConfig:
@@ -33,8 +27,6 @@ def _config(**overrides) -> AppConfig:
         },
         outputs={
             "web": OutputConfig(enabled=True),
-            "telegram": OutputConfig(enabled=False),
-            "notion": OutputConfig(enabled=False),
         },
     )
     base.update(overrides)
@@ -64,14 +56,10 @@ def test_build_source_units_skips_unknown_step():
 def test_build_output_writers_respects_enabled(tmp_path: Path):
     writers = build_output_writers(_config(), _secrets(), tmp_path)
     names = {w.name for w in writers}
-    assert names == {"web"}  # telegram/notion disabled
+    assert names == {"web"}
 
 
-def test_build_output_writers_all_enabled(tmp_path: Path):
-    config = _config(outputs={
-        "web": OutputConfig(enabled=True),
-        "telegram": OutputConfig(enabled=True),
-        "notion": OutputConfig(enabled=True),
-    })
+def test_build_output_writers_disabled(tmp_path: Path):
+    config = _config(outputs={"web": OutputConfig(enabled=False)})
     writers = build_output_writers(config, _secrets(), tmp_path)
-    assert {w.name for w in writers} == {"web", "telegram", "notion"}
+    assert writers == []

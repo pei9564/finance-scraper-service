@@ -36,11 +36,6 @@ class AIConfig(BaseModel):
     summary_profiles: dict[str, SummaryProfile] = Field(default_factory=dict)
 
 
-class TelegramConfig(BaseModel):
-    max_events_per_message: int = 10
-    critical_only_for_immediate: bool = True
-
-
 class RSSFeedConfig(BaseModel):
     name: str
     url: str
@@ -87,8 +82,6 @@ DEFAULT_SOURCES: dict[str, SourceConfig] = {
 }
 DEFAULT_OUTPUTS: dict[str, OutputConfig] = {
     "web": OutputConfig(enabled=True),
-    "telegram": OutputConfig(enabled=False),
-    "notion": OutputConfig(enabled=False),
 }
 
 
@@ -99,6 +92,5 @@ class AppConfig(BaseModel):
     finance: FinanceConfig = Field(default_factory=FinanceConfig)
     filters: FilterConfig = Field(default_factory=FilterConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
-    telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     sources: dict[str, SourceConfig] = Field(default_factory=lambda: dict(DEFAULT_SOURCES))
     outputs: dict[str, OutputConfig] = Field(default_factory=lambda: dict(DEFAULT_OUTPUTS))

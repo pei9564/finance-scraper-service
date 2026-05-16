@@ -79,4 +79,3 @@ def test_app_config_default_sources_and_outputs():
     assert config.sources["news"].steps == ["summarize"]
     assert config.sources["github"].enabled is True
     assert config.outputs["web"].enabled is True
-    assert config.outputs["telegram"].enabled is False

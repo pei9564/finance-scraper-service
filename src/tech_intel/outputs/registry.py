@@ -13,8 +13,6 @@ from typing import Callable
 from tech_intel.domain import AppConfig, Secrets
 from tech_intel.interfaces import OutputWriter
 
-from .notion import NotionOutput
-from .telegram import TelegramOutput
 from .web import WebOutput
 
 logger = logging.getLogger(__name__)
@@ -29,8 +27,6 @@ class OutputDeps:
 
 OUTPUT_FACTORIES: dict[str, Callable[[OutputDeps], OutputWriter]] = {
     "web": lambda d: WebOutput(d.output_dir),
-    "telegram": lambda d: TelegramOutput(d.secrets.telegram_token, d.secrets.telegram_chat_id),
-    "notion": lambda d: NotionOutput(d.secrets.notion_key, d.secrets.notion_db_ids),
 }
 
 
