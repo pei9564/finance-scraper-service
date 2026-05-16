@@ -17,27 +17,13 @@ from dotenv import load_dotenv
 from finance_scraper.domain import AppConfig, EventType, ImpactLevel, SourceType, SummarizedEvent
 from finance_scraper.infrastructure import LLMGatewayClient
 from finance_scraper.sources.steps import SummarizeStep
+from finance_scraper.sources.steps.fetch_body import fetch_article_text
 from finance_scraper.storage import daily, init_schema
 
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config" / "repos.yaml"
-
-
-def _fetch_body(url: str) -> str | None:
-    """從 URL 抓取文章內文；失敗或內容過短回傳 None。"""
-    try:
-        import httpx
-        import trafilatura
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; TechIntelBot/1.0)"}
-        r = httpx.get(url, headers=headers, follow_redirects=True, timeout=15)
-        r.raise_for_status()
-        text = trafilatura.extract(r.text, include_comments=False, include_tables=False)
-        return text if text and len(text) > 100 else None
-    except Exception as e:
-        logger.debug(f"抓取內文失敗 {url}：{e}")
-        return None
 
 
 def _dict_to_event(d: dict) -> SummarizedEvent:
@@ -96,7 +82,7 @@ async def retry_summary(day_str: str, source: str) -> int:
         body_updated: str | None = None
         if not (d.get("body") or "").strip():
             logger.info(f"抓取內文：{d['url']}")
-            fetched = await asyncio.to_thread(_fetch_body, d["url"])
+            fetched = await asyncio.to_thread(fetch_article_text, d["url"])
             if fetched:
                 d["body"] = fetched
                 body_updated = fetched

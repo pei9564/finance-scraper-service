@@ -18,7 +18,7 @@ from .finance import FinanceCollector
 from .github import GitHubCollector
 from .news import NewsCollector
 from .paper import PaperCollector
-from .steps import SummarizeStep, TranslateStep
+from .steps import FetchBodyStep, SummarizeStep, TranslateStep
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,7 @@ COLLECTOR_FACTORIES: dict[str, Callable[[BuildDeps], SourceCollector]] = {
 }
 
 STEP_FACTORIES: dict[str, Callable[[BuildDeps], ProcessingStep]] = {
+    "fetch_body": lambda d: FetchBodyStep(),
     "summarize": lambda d: SummarizeStep(d.llm, d.config.ai),
     "translate": lambda d: TranslateStep(d.llm),  # 已註冊，目前 config 未接到任何來源
 }
