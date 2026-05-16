@@ -1,17 +1,19 @@
 services:
   app:
     build: .
-    container_name: tech-intel
+    container_name: finance-scraper
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${PORT:-8080}:8080"
     env_file:
       - .env
     environment:
       # 容器內無法用 localhost 連到 host 上的 vLLM gateway。
       # 若 .env 沒設 VLLM_BASE_URL，用 host.docker.internal 指回 host。
+      # 這個 default 只在 local compose 有意義；k3s 那邊請改指 cluster 內的 vLLM Service。
       VLLM_BASE_URL: ${VLLM_BASE_URL:-http://host.docker.internal:8000/v1}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
+      # local 開發：mount 覆蓋 image 內建 config，改 yaml 不用 rebuild
       - ./config:/app/config:ro

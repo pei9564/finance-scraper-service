@@ -3,13 +3,13 @@ from datetime import datetime
 
 import pytest
 
-from tech_intel.domain import (
+from finance_scraper.domain import (
     ClassifiedEvent, EventType, FilterConfig, RawGitHubEvent, RawNewsEvent,
     SourceType, SummarizedEvent,
 )
-from tech_intel.pipeline import Pipeline
-from tech_intel.processing import DailySummarizer
-from tech_intel.sources import SourceUnit
+from finance_scraper.pipeline import Pipeline
+from finance_scraper.processing import DailySummarizer
+from finance_scraper.sources import SourceUnit
 
 
 class StubGateway:

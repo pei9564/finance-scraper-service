@@ -1,8 +1,8 @@
 """測試重要性過濾器"""
 from datetime import datetime
 
-from tech_intel.domain import EventType, FilterConfig, RawGitHubEvent
-from tech_intel.processing.filter import filter_events, score_event
+from finance_scraper.domain import EventType, FilterConfig, RawGitHubEvent
+from finance_scraper.processing.filter import filter_events, score_event
 
 
 def make_event(**kwargs) -> RawGitHubEvent:

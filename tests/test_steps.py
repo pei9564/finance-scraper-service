@@ -1,10 +1,10 @@
 """測試逐則處理步驟"""
 from datetime import datetime
 
-from tech_intel.domain import (
+from finance_scraper.domain import (
     AIConfig, EventType, RawNewsEvent, SourceType, SummarizedEvent, SummaryProfile,
 )
-from tech_intel.sources.steps import SummarizeStep, TranslateStep
+from finance_scraper.sources.steps import SummarizeStep, TranslateStep
 
 
 class StubGateway:

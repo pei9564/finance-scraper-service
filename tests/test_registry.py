@@ -1,11 +1,11 @@
 """測試來源與輸出的 registry — enabled 旗標與名稱對應。"""
 from pathlib import Path
 
-from tech_intel.domain import (
+from finance_scraper.domain import (
     AppConfig, OutputConfig, RepoConfig, Secrets, SourceConfig, SourceType,
 )
-from tech_intel.outputs.registry import build_output_writers
-from tech_intel.sources.registry import build_source_units
+from finance_scraper.outputs.registry import build_output_writers
+from finance_scraper.sources.registry import build_source_units
 
 
 class StubGateway:

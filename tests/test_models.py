@@ -3,7 +3,7 @@ from datetime import datetime
 
 import pytest
 
-from tech_intel.domain import (
+from finance_scraper.domain import (
     AppConfig, ClassifiedEvent, EventType, ImpactLevel,
     RawGitHubEvent, RepoConfig, SummarizedEvent,
 )

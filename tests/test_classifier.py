@@ -3,8 +3,8 @@ from datetime import datetime
 
 import pytest
 
-from tech_intel.domain import EventType, RawGitHubEvent
-from tech_intel.processing.classifier import classify
+from finance_scraper.domain import EventType, RawGitHubEvent
+from finance_scraper.processing.classifier import classify
 
 
 def make_event(**kwargs) -> RawGitHubEvent:

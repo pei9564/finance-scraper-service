@@ -1,5 +1,5 @@
 [project]
-name = "github-intel"
+name = "finance-scraper"
 version = "0.1.0"
 description = "自動化 GitHub 技術情報收集與分析系統"
 requires-python = ">=3.12"
@@ -18,10 +18,10 @@ dependencies = [
 ]
 
 [project.scripts]
-tech-intel = "tech_intel.main:cli"
-tech-intel-server = "tech_intel.server:cli"
-tech-intel-retry = "tech_intel.retry:cli"
-tech-intel-monthly = "tech_intel.monthly:cli"
+finance-scraper = "finance_scraper.main:cli"
+finance-scraper-server = "finance_scraper.server:cli"
+finance-scraper-retry = "finance_scraper.retry:cli"
+finance-scraper-monthly = "finance_scraper.monthly:cli"
 
 [dependency-groups]
 dev = [
