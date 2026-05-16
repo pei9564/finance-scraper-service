@@ -137,6 +137,19 @@ async def load_run(day_str: str) -> dict[str, Any] | None:
     }
 
 
+async def list_urls_for_sources(sources: list[str]) -> set[str]:
+    """回傳給定 source 在 events 表中已存在的所有 url(media collector 跨日去重用)。"""
+    if not sources:
+        return set()
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT DISTINCT url FROM events WHERE source = ANY($1::text[])",
+            sources,
+        )
+    return {r["url"] for r in rows}
+
+
 async def list_dates() -> list[str]:
     """所有日報日期，新→舊。"""
     pool = await get_pool()

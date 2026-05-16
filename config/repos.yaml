@@ -93,6 +93,23 @@ papers:
   hf_papers_enabled: true
   hf_top_n: 5
 
+# YouTube + Podcast (走外部 STT 服務逐字稿,再進 daily pipeline 跟 news 一起摘要/翻譯)
+# 真實 STT URL 透過 env STT_BASE_URL 覆蓋。每個 channels 條目可加 lang: zh 跳翻譯。
+media:
+  stt_base_url: "http://localhost:8000"
+  stt_poll_interval_seconds: 15
+  stt_timeout_seconds: 900
+  stt_language: ""           # 留空 STT 自動偵測
+  per_channel_episodes: 1    # 每個頻道每次抓最新幾集
+  youtube_tech:
+    channels: []             # 例: - {name: "Fireship", url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA"}
+  youtube_fin:
+    channels: []
+  podcast_tech:
+    channels: []
+  podcast_fin:
+    channels: []
+
 filters:
   lookback_days: 30
 
@@ -133,6 +150,17 @@ ai:
         對使用者的影響。若 release notes 含明確的 bug fix / new feature
         條列請挑 2-3 個最重要的提到。
         只輸出摘要本身，不要開場白、結語或 markdown 符號。
+    # YouTube / Podcast 共用同一份指令 - 摘要逐字稿。用 YAML anchor 統一管理
+    youtube_tech: &media_summary
+      max_tokens: 800
+      instruction: |
+        請用繁體中文，以大約 250-300 字摘要以下影片或 Podcast 逐字稿的重點，
+        涵蓋：節目主題、討論的重點論點、結論或關鍵案例。
+        若內容偏技術，保留核心技術名詞；若偏財經，保留具體數字。
+        只輸出摘要本身，不要開場白、結語或 markdown 符號。
+    youtube_fin: *media_summary
+    podcast_tech: *media_summary
+    podcast_fin: *media_summary
 
 # 各來源的開關與逐則處理步驟鏈（步驟名稱對應 sources/registry.py 的 STEP_FACTORIES）
 sources:
@@ -144,6 +172,19 @@ sources:
     steps: [translate, summarize]
   finance:
     enabled: true
+    steps: [translate, summarize]
+  # 預設關閉 - channels 為空時也不會做事;設好 channels 後再 enabled: true
+  youtube_tech:
+    enabled: false
+    steps: [translate, summarize]
+  youtube_fin:
+    enabled: false
+    steps: [translate, summarize]
+  podcast_tech:
+    enabled: false
+    steps: [translate, summarize]
+  podcast_fin:
+    enabled: false
     steps: [translate, summarize]
 
 # 各輸出目標的開關

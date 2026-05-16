@@ -14,6 +14,10 @@ _LABEL_BY_SOURCE: dict[SourceType, str] = {
     SourceType.NEWS: "News",
     SourceType.PAPER: "Paper",
     SourceType.FINANCE: "Finance",
+    SourceType.YOUTUBE_TECH: "Video/Tech",
+    SourceType.YOUTUBE_FIN: "Video/Finance",
+    SourceType.PODCAST_TECH: "Podcast/Tech",
+    SourceType.PODCAST_FIN: "Podcast/Finance",
 }
 
 

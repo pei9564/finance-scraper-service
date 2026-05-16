@@ -2,19 +2,21 @@
 
 新增來源 = 一個 COLLECTOR_FACTORIES 條目 + repos.yaml 的一筆 sources 設定。
 新增步驟 = 一個 ProcessingStep 類別 + 一筆 STEP_FACTORIES 條目。
-orchestrator 不需更動。enabled 旗標在此解析，orchestrator 只看得到啟用的單元。
+orchestrator 不需更動。enabled 旗標在此解析,orchestrator 只看得到啟用的單元。
 """
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 from finance_scraper.domain import AppConfig, Secrets, SourceType
+from finance_scraper.infrastructure import STTClient
 from finance_scraper.interfaces import LLMGateway, ProcessingStep, SourceCollector
 
 from .base import SourceUnit
 from .finance import FinanceCollector
+from .media import MediaCollector
 from .news import NewsCollector
 from .paper import PaperCollector
 from .steps import FetchBodyStep, SummarizeStep, TranslateStep
@@ -26,20 +28,57 @@ logger = logging.getLogger(__name__)
 class BuildDeps:
     config: AppConfig
     secrets: Secrets
-    llm: LLMGateway | None  # None 代表 gateway 不可用，依賴 LLM 的步驟會自行降級
+    llm: LLMGateway | None  # None 代表 gateway 不可用,依賴 LLM 的步驟會自行降級
     lookback: int
+    seen_media_urls: set[str] = field(default_factory=set)
+
+
+def _stt_client(config: AppConfig) -> STTClient:
+    m = config.media
+    return STTClient(
+        base_url=m.stt_base_url,
+        poll_interval_seconds=m.stt_poll_interval_seconds,
+        timeout_seconds=m.stt_timeout_seconds,
+        language=m.stt_language,
+    )
+
+
+def _media_factory(source_type: SourceType, sub_attr: str) -> Callable[[BuildDeps], SourceCollector]:
+    def factory(d: BuildDeps) -> SourceCollector:
+        return MediaCollector(
+            source_type=source_type,
+            config=getattr(d.config.media, sub_attr),
+            stt=_stt_client(d.config),
+            seen_urls=d.seen_media_urls,
+            per_channel=d.config.media.per_channel_episodes,
+            lookback_days=d.lookback,
+        )
+    return factory
 
 
 COLLECTOR_FACTORIES: dict[str, Callable[[BuildDeps], SourceCollector]] = {
     "news": lambda d: NewsCollector(d.config.news, d.lookback),
     "paper": lambda d: PaperCollector(d.config.papers, d.lookback, d.llm),
     "finance": lambda d: FinanceCollector(d.config.finance, d.lookback),
+    "youtube_tech": _media_factory(SourceType.YOUTUBE_TECH, "youtube_tech"),
+    "youtube_fin": _media_factory(SourceType.YOUTUBE_FIN, "youtube_fin"),
+    "podcast_tech": _media_factory(SourceType.PODCAST_TECH, "podcast_tech"),
+    "podcast_fin": _media_factory(SourceType.PODCAST_FIN, "podcast_fin"),
 }
 
+
 def _non_en_feed_names(config: AppConfig) -> set[str]:
-    """匯整所有非英文 RSS 來源的 feed_name,供 TranslateStep 跳過用。"""
+    """匯整所有非英文 feed 名稱(news/finance RSS + 4 個 media channel),供 TranslateStep 跳過。"""
     feeds = [*config.news.rss_feeds, *config.finance.rss_feeds]
-    return {f.name for f in feeds if f.lang != "en"}
+    media_channels = (
+        config.media.youtube_tech.channels
+        + config.media.youtube_fin.channels
+        + config.media.podcast_tech.channels
+        + config.media.podcast_fin.channels
+    )
+    return {f.name for f in feeds if f.lang != "en"} | {
+        c.name for c in media_channels if c.lang != "en"
+    }
 
 
 STEP_FACTORIES: dict[str, Callable[[BuildDeps], ProcessingStep]] = {
@@ -54,24 +93,28 @@ def build_source_units(
     secrets: Secrets,
     llm: LLMGateway | None,
     lookback: int,
+    seen_media_urls: set[str] | None = None,
 ) -> list[SourceUnit]:
-    deps = BuildDeps(config=config, secrets=secrets, llm=llm, lookback=lookback)
+    deps = BuildDeps(
+        config=config, secrets=secrets, llm=llm, lookback=lookback,
+        seen_media_urls=seen_media_urls or set(),
+    )
     units: list[SourceUnit] = []
 
     for name, source_config in config.sources.items():
         if not source_config.enabled:
-            logger.info(f"來源 '{name}' 已停用，略過")
+            logger.info(f"來源 '{name}' 已停用,略過")
             continue
         collector_factory = COLLECTOR_FACTORIES.get(name)
         if collector_factory is None:
-            logger.warning(f"未知來源 '{name}'，略過")
+            logger.warning(f"未知來源 '{name}',略過")
             continue
 
         steps: list[ProcessingStep] = []
         for step_name in source_config.steps:
             step_factory = STEP_FACTORIES.get(step_name)
             if step_factory is None:
-                logger.warning(f"來源 '{name}' 引用未知步驟 '{step_name}'，略過")
+                logger.warning(f"來源 '{name}' 引用未知步驟 '{step_name}',略過")
                 continue
             steps.append(step_factory(deps))
 
@@ -80,6 +123,6 @@ def build_source_units(
             collector=collector_factory(deps),
             steps=steps,
         ))
-        logger.info(f"來源 '{name}' 已啟用，步驟：{[s.name for s in steps]}")
+        logger.info(f"來源 '{name}' 已啟用,步驟:{[s.name for s in steps]}")
 
     return units

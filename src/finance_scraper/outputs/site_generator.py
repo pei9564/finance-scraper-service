@@ -14,6 +14,10 @@ SOURCE_LABELS: dict[str, str] = {
     "news": "📰 新聞",
     "paper": "📄 論文",
     "finance": "💰 財經",
+    "youtube_tech": "📺 YT 科技",
+    "youtube_fin": "📺 YT 財經",
+    "podcast_tech": "🎙️ Podcast 科技",
+    "podcast_fin": "🎙️ Podcast 財經",
 }
 
 
@@ -767,10 +771,9 @@ function esc(s) {
 
 function cardHtml(e) {
   let origin = "";
-  if (e.source === "news") origin = esc(e.feed_name || "");
-  else if (e.source === "paper") origin = esc((e.categories || []).slice(0, 2).join(", "));
-  else if (e.source === "finance") origin = esc(e.feed_name || "");
-  const noSummary = !e.ai_summary && (e.source === "news" || e.source === "paper" || e.source === "finance");
+  if (e.source === "paper") origin = esc((e.categories || []).slice(0, 2).join(", "));
+  else origin = esc(e.feed_name || "");  // news / finance / youtube_* / podcast_* 都用 feed_name
+  const noSummary = !e.ai_summary;
   const isOn = e.uid && BOOKMARKED_UIDS.has(e.uid);
   const star = e.uid
     ? `<button class="bookmark-btn ${isOn ? "on" : ""}" data-uid="${esc(e.uid)}"

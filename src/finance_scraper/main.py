@@ -10,12 +10,14 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-from finance_scraper.domain import AppConfig, Secrets
+from finance_scraper.domain import MEDIA_SOURCE_TYPES, AppConfig, Secrets
 from finance_scraper.infrastructure import LLMGatewayClient
 from finance_scraper.outputs import build_output_writers
 from finance_scraper.pipeline import Pipeline
 from finance_scraper.processing import DailySummarizer
 from finance_scraper.sources import build_source_units
+from finance_scraper.storage import daily as daily_store
+from finance_scraper.storage import init_schema
 
 logging.basicConfig(
     level=logging.INFO,
@@ -63,10 +65,19 @@ async def run_pipeline() -> None:
     raw_llm = LLMGatewayClient(config.ai)
     llm = raw_llm if raw_llm.health() else None
     if llm is None:
-        logger.warning("LLM gateway 不可用 — 依賴 LLM 的步驟（arxiv/逐則摘要/日報摘要）會自動降級")
+        logger.warning("LLM gateway 不可用 — 依賴 LLM 的步驟(arxiv/逐則摘要/日報摘要)會自動降級")
+
+    # 預先載入已轉寫過的 media url,避免重複呼叫 STT(跨日去重)
+    await init_schema()
+    seen_media_urls = await daily_store.list_urls_for_sources(
+        [s.value for s in MEDIA_SOURCE_TYPES]
+    )
+    if seen_media_urls:
+        logger.info(f"已轉寫的 media url 共 {len(seen_media_urls)} 個,本次將跳過")
 
     pipeline = Pipeline(
-        source_units=build_source_units(config, secrets, llm, lookback_days),
+        source_units=build_source_units(config, secrets, llm, lookback_days,
+                                        seen_media_urls=seen_media_urls),
         output_writers=build_output_writers(config, secrets, OUTPUT_DIR),
         filter_config=config.filters,
         daily_summarizer=DailySummarizer(llm),

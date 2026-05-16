@@ -4,6 +4,9 @@ from .config import (
     AppConfig,
     FilterConfig,
     FinanceConfig,
+    MediaChannelConfig,
+    MediaConfig,
+    MediaSourceConfig,
     NewsConfig,
     OutputConfig,
     PaperConfig,
@@ -12,7 +15,7 @@ from .config import (
     SourceConfig,
     SummaryProfile,
 )
-from .enums import EventType, ImpactLevel, SourceType
+from .enums import MEDIA_SOURCE_TYPES, EventType, ImpactLevel, SourceType
 from .events import (
     ClassifiedEvent,
     RawEvent,
@@ -27,6 +30,9 @@ __all__ = [
     "AppConfig",
     "FilterConfig",
     "FinanceConfig",
+    "MediaChannelConfig",
+    "MediaConfig",
+    "MediaSourceConfig",
     "NewsConfig",
     "OutputConfig",
     "PaperConfig",
@@ -36,6 +42,7 @@ __all__ = [
     "SummaryProfile",
     "EventType",
     "ImpactLevel",
+    "MEDIA_SOURCE_TYPES",
     "SourceType",
     "ClassifiedEvent",
     "RawEvent",

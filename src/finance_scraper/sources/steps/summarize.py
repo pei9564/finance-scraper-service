@@ -43,10 +43,25 @@ def _build_finance_head(event: ClassifiedEvent) -> str:
     )
 
 
+def _build_media_head(event: ClassifiedEvent) -> str:
+    # 影片 / podcast 逐字稿較長，截到 6000 字
+    body = (event.body or "")[:6000]
+    medium = "Podcast" if event.source_type in (SourceType.PODCAST_TECH, SourceType.PODCAST_FIN) else "影片"
+    return (
+        f"{medium}標題：{event.title}\n"
+        f"頻道：{event.feed_name}\n"
+        f"逐字稿：{body}"
+    )
+
+
 _HEAD_BUILDERS: dict[SourceType, Callable[[ClassifiedEvent], str]] = {
     SourceType.NEWS: _build_news_head,
     SourceType.PAPER: _build_paper_head,
     SourceType.FINANCE: _build_finance_head,
+    SourceType.YOUTUBE_TECH: _build_media_head,
+    SourceType.YOUTUBE_FIN: _build_media_head,
+    SourceType.PODCAST_TECH: _build_media_head,
+    SourceType.PODCAST_FIN: _build_media_head,
 }
 
 

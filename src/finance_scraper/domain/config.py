@@ -50,6 +50,31 @@ class FinanceConfig(BaseModel):
     rss_feeds: list[RSSFeedConfig] = Field(default_factory=list)
 
 
+class MediaChannelConfig(BaseModel):
+    """單一 YouTube 頻道 / Podcast feed 的 RSS 設定。lang 預設 en,中文頻道設 zh 跳翻譯。"""
+    name: str
+    url: str  # RSS feed URL (YT: https://www.youtube.com/feeds/videos.xml?channel_id=...)
+    lang: str = "en"
+
+
+class MediaSourceConfig(BaseModel):
+    """單一 media SourceType 的頻道集合(每個 source_type 對應一個區塊)。"""
+    channels: list[MediaChannelConfig] = Field(default_factory=list)
+
+
+class MediaConfig(BaseModel):
+    """媒體(YouTube + Podcast)整體設定 — STT 服務參數 + 4 個 source 各自的 channels。"""
+    stt_base_url: str = "http://localhost:8000"  # env STT_BASE_URL 可覆蓋
+    stt_poll_interval_seconds: int = 15
+    stt_timeout_seconds: int = 900
+    stt_language: str = ""  # 留空讓 STT 自動偵測
+    per_channel_episodes: int = 1  # 每個頻道每次取最新幾集
+    youtube_tech: MediaSourceConfig = Field(default_factory=MediaSourceConfig)
+    youtube_fin: MediaSourceConfig = Field(default_factory=MediaSourceConfig)
+    podcast_tech: MediaSourceConfig = Field(default_factory=MediaSourceConfig)
+    podcast_fin: MediaSourceConfig = Field(default_factory=MediaSourceConfig)
+
+
 class PaperConfig(BaseModel):
     arxiv_categories: list[str] = Field(default_factory=lambda: ["cs.AI", "cs.CL", "cs.LG"])
     arxiv_fetch_limit: int = 200   # 送 LLM 前最多抓幾篇（去重後）
@@ -86,6 +111,7 @@ class AppConfig(BaseModel):
     news: NewsConfig = Field(default_factory=NewsConfig)
     papers: PaperConfig = Field(default_factory=PaperConfig)
     finance: FinanceConfig = Field(default_factory=FinanceConfig)
+    media: MediaConfig = Field(default_factory=MediaConfig)
     filters: FilterConfig = Field(default_factory=FilterConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
     sources: dict[str, SourceConfig] = Field(default_factory=lambda: dict(DEFAULT_SOURCES))

@@ -16,6 +16,11 @@ def score_event(event: RawEvent, config: FilterConfig) -> float:
         return _score_paper(event)
     if event.source_type == SourceType.FINANCE:
         return _score_finance(event)
+    if event.source_type in {
+        SourceType.YOUTUBE_TECH, SourceType.YOUTUBE_FIN,
+        SourceType.PODCAST_TECH, SourceType.PODCAST_FIN,
+    }:
+        return 0.5  # 媒體類事件取得成本高,預設較高重要性,排序上靠前
     return 0.0
 
 
