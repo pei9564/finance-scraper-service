@@ -780,9 +780,11 @@ function cardHtml(e) {
         title="${isOn ? "取消收藏" : "收藏"}"
         onclick="toggleBookmark(this, '${esc(e.uid)}')">★</button>`
     : "";
+  const date = (e.created_at || "").slice(0, 10);
   const meta = [
     `<span class="badge src-${e.source}">${e.source}</span>`,
     origin ? `<span>${origin}</span>` : "",
+    date ? `<span style="color:#8b949e">📅 ${date}</span>` : "",
     e.classification ? `<span class="badge">${esc(e.classification)}</span>` : "",
     (e.impact_level === "Breaking" || e.impact_level === "High")
       ? `<span class="badge impact-${e.impact_level}">${e.impact_level}</span>` : "",
@@ -914,9 +916,11 @@ async function generateDigest(month) {
 }
 
 function bookmarkCardHtml(b) {
+  const publishedDate = (b.event_created_at || "").slice(0, 10);
   const meta = [
     `<span class="badge src-${b.source}">${b.source}</span>`,
     b.origin ? `<span>${esc(b.origin)}</span>` : "",
+    publishedDate ? `<span style="color:#8b949e">📅 ${publishedDate}</span>` : "",
     b.classification ? `<span class="badge">${esc(b.classification)}</span>` : "",
     `<span style="color:#6e7681">收藏於 ${(b.bookmarked_at || "").slice(0,10)}</span>`,
     `<button class="bookmark-btn on" data-uid="${esc(b.event_uid)}"
