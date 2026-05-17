@@ -54,6 +54,51 @@ def test_summarize_step_passthrough_when_no_profile():
     assert gateway.calls == []
 
 
+def _media_event() -> SummarizedEvent:
+    raw = RawNewsEvent(
+        source_type=SourceType.YOUTUBE_FIN,
+        event_type=EventType.VIDEO,
+        title="某 YT 影片",
+        url="https://yt/v1",
+        created_at=datetime(2026, 5, 15),
+        body="完整逐字稿內容...",
+        feed_name="頻道X",
+    )
+    return SummarizedEvent(**raw.model_dump())
+
+
+def test_summarize_step_media_fallback_when_llm_none():
+    """LLM 不可用時 media 來源應 fallback 把 body 寫進 ai_summary。"""
+    config = AIConfig(summary_profiles={})  # profile 不重要,llm None 直接走 fallback
+    step = SummarizeStep(llm=None, config=config)
+
+    result = step.apply(_media_event())
+
+    assert result.ai_summary == "完整逐字稿內容..."
+
+
+def test_summarize_step_media_fallback_when_llm_raises():
+    """LLM 拋錯時 media 來源也應 fallback。"""
+    class BoomGateway:
+        def chat(self, *a, **k):
+            raise RuntimeError("boom")
+    config = AIConfig(summary_profiles={"youtube_fin": SummaryProfile(max_tokens=300, instruction="x")})
+    step = SummarizeStep(BoomGateway(), config)
+
+    result = step.apply(_media_event())
+
+    assert result.ai_summary == "完整逐字稿內容..."
+
+
+def test_summarize_step_news_does_not_fallback_when_llm_none():
+    """非 media 來源即使 LLM 不可用也不該 fallback,維持空 ai_summary。"""
+    step = SummarizeStep(llm=None, config=AIConfig(summary_profiles={}))
+
+    result = step.apply(_news_event())
+
+    assert result.ai_summary == ""
+
+
 def _en_news_event(feed_name: str = "HackerNews") -> SummarizedEvent:
     raw = RawNewsEvent(
         title="OpenAI releases new model",

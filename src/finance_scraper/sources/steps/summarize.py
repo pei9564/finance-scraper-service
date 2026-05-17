@@ -9,10 +9,29 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-from finance_scraper.domain import AIConfig, ClassifiedEvent, SourceType, SummarizedEvent
+from finance_scraper.domain import (
+    MEDIA_SOURCE_TYPES, AIConfig, ClassifiedEvent, SourceType, SummarizedEvent,
+)
 from finance_scraper.interfaces import LLMGateway
 
 logger = logging.getLogger(__name__)
+
+
+def _set_summary(event: ClassifiedEvent, summary: str) -> ClassifiedEvent:
+    if isinstance(event, SummarizedEvent):
+        return event.model_copy(update={"ai_summary": summary})
+    return SummarizedEvent(**event.model_dump(), ai_summary=summary)
+
+
+def _media_fallback(event: ClassifiedEvent) -> ClassifiedEvent:
+    """LLM 不可用或失敗時對 media source(YT / podcast)以原文逐字稿填 ai_summary,
+    讓卡片不會空白。其他來源 body 太長,不適合直接當摘要顯示,維持空 ai_summary
+    走原本「摘要待重跑」流程。"""
+    body = (event.body or "").strip()
+    if not body:
+        return event
+    logger.info(f"media fallback:無 LLM 摘要,以原文逐字稿填 ai_summary ({event.url})")
+    return _set_summary(event, body)
 
 
 def _build_news_head(event: ClassifiedEvent) -> str:
@@ -75,12 +94,15 @@ class SummarizeStep:
     def apply(self, event: ClassifiedEvent) -> ClassifiedEvent:
         """為事件產生繁中摘要並寫入 ai_summary。
 
-        event 由 orchestrator 預先轉成 SummarizedEvent；若該來源沒有對應的
-        head builder 或 summary profile，原樣回傳。
-        LLM 不可用時直接跳過——卡片會顯示「摘要待重跑」，可後續用 retry 補。
+        event 由 orchestrator 預先轉成 SummarizedEvent;若該來源沒有對應的
+        head builder 或 summary profile,原樣回傳。
+        LLM 不可用時:media 來源 fallback 把逐字稿原文當 ai_summary;其他來源
+        跳過(卡片顯示「摘要待重跑」),可後續用 retry 補。
         """
+        is_media = event.source_type in MEDIA_SOURCE_TYPES
+
         if self.llm is None:
-            return event
+            return _media_fallback(event) if is_media else event
 
         head_builder = _HEAD_BUILDERS.get(event.source_type)
         profile = self.config.summary_profiles.get(event.source_type.value)
@@ -88,15 +110,13 @@ class SummarizeStep:
             return event
 
         if not (event.body or "").strip():
-            return event  # 無內文，等補爬後再摘要
+            return event  # 無內文,等補爬後再摘要
 
         prompt = f"{profile.instruction.strip()}\n\n{head_builder(event)}"
         try:
             summary = self.llm.chat(prompt, profile.max_tokens)
         except Exception as e:
-            logger.error(f"摘要失敗（{event.url}）：{e}")
-            return event
+            logger.error(f"摘要失敗({event.url}):{e}")
+            return _media_fallback(event) if is_media else event
 
-        if isinstance(event, SummarizedEvent):
-            return event.model_copy(update={"ai_summary": summary})
-        return SummarizedEvent(**event.model_dump(), ai_summary=summary)
+        return _set_summary(event, summary)
