@@ -104,14 +104,19 @@ media:
   youtube_tech:
     channels: []             # 例: - {name: "Fireship", url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCsBjURrPoezykLs9EqgamOA"}
   youtube_fin:
-    channels: []
+    channels:
+      - name: "老王愛說笑"
+        url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCvnLmiWt_zIVIh0zUm_j4Hw"
+        lang: zh
   podcast_tech:
     channels: []
   podcast_fin:
     channels: []
 
 filters:
-  lookback_days: 30
+  # 所有 collector 只看 24 小時內(news / finance / paper / media 共用)。
+  # 漏跑一天會漏該天 — 若有需要可調 2~3 提供補抓緩衝
+  lookback_days: 1
 
 ai:
   # 內部 LLM gateway（OpenAI 相容）；真實位址/金鑰用 .env 的 VLLM_* 覆蓋
@@ -178,7 +183,7 @@ sources:
     enabled: false
     steps: [translate, summarize]
   youtube_fin:
-    enabled: false
+    enabled: true
     steps: [translate, summarize]
   podcast_tech:
     enabled: false
