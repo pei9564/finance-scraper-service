@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from finance_scraper.domain import AppConfig, Secrets, SourceType
-from finance_scraper.infrastructure import STTClient
 from finance_scraper.interfaces import LLMGateway, ProcessingStep, SourceCollector
 
 from .base import SourceUnit
@@ -33,22 +32,11 @@ class BuildDeps:
     seen_media_urls: set[str] = field(default_factory=set)
 
 
-def _stt_client(config: AppConfig) -> STTClient:
-    m = config.media
-    return STTClient(
-        base_url=m.stt_base_url,
-        poll_interval_seconds=m.stt_poll_interval_seconds,
-        timeout_seconds=m.stt_timeout_seconds,
-        language=m.stt_language,
-    )
-
-
 def _media_factory(source_type: SourceType, sub_attr: str) -> Callable[[BuildDeps], SourceCollector]:
     def factory(d: BuildDeps) -> SourceCollector:
         return MediaCollector(
             source_type=source_type,
             config=getattr(d.config.media, sub_attr),
-            stt=_stt_client(d.config),
             seen_urls=d.seen_media_urls,
             per_channel=d.config.media.per_channel_episodes,
             lookback_days=d.lookback,

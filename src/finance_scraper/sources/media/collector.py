@@ -1,11 +1,14 @@
 """Media (YouTube / Podcast) 收集器 — 共用於 4 個 source_type。
 
-對每個頻道:讀 RSS → 取最新 N 集 → seen_urls 內的跳過 → 其餘送 STT 轉成
-transcript → 包成 RawNewsEvent(feed_name=頻道名, body=逐字稿)送進 daily
-pipeline,後續走 translate / summarize 跟 news / paper 一樣。
+對每個頻道:讀 RSS → 取最新 N 集 → seen_urls 內的跳過 → 其餘以 body="" 的
+RawNewsEvent 入庫(等用戶在 UI 上 per-event 觸發 STT)。
+
+設計:蒐集階段不打 STT(會慢且吃資源),改由 server 的 /api/transcribe-event
+端點按需求觸發。seen_urls 仍保留:DB 內已有同 url 的事件就不再 append
+(不論已轉錄或還是空 body — 避免同一影片在 events 表出現多筆)。
 
 不需要新的 domain model — feed_name + body + url + title + score 全部跟
-news 一致,只是 source_type 換成 YOUTUBE_* / PODCAST_*。
+news 一致,只是 source_type 換成 YOUTUBE_* / PODCAST_*,body 預設為空。
 """
 from __future__ import annotations
 
@@ -16,7 +19,6 @@ from typing import Iterable
 import feedparser
 
 from finance_scraper.domain import EventType, MediaSourceConfig, RawNewsEvent, SourceType
-from finance_scraper.infrastructure import STTClient
 
 logger = logging.getLogger(__name__)
 
@@ -50,14 +52,12 @@ class MediaCollector:
         self,
         source_type: SourceType,
         config: MediaSourceConfig,
-        stt: STTClient,
         seen_urls: Iterable[str] = (),
         per_channel: int = 1,
         lookback_days: int = 7,
     ):
         self.source_type = source_type
         self.config = config
-        self.stt = stt
         self.seen_urls: set[str] = set(seen_urls)
         self.per_channel = per_channel
         self.since = datetime.now(timezone.utc) - timedelta(days=lookback_days)
@@ -74,7 +74,7 @@ class MediaCollector:
                 events.extend(self._collect_channel(channel))
             except Exception as e:
                 logger.error(f"{self.source_type.value} 頻道 '{channel.name}' 失敗:{e}")
-        logger.info(f"{self.source_type.value} 收集完成:{len(events)} 筆")
+        logger.info(f"{self.source_type.value} 收集完成:{len(events)} 筆(body 空,STT 待手動觸發)")
         return events
 
     def _collect_channel(self, channel) -> list[RawNewsEvent]:
@@ -93,15 +93,11 @@ class MediaCollector:
             if not url:
                 continue
             if url in self.seen_urls:
-                logger.info(f"  跳過已轉寫:{url}")
+                logger.info(f"  跳過 DB 內已有:{url}")
                 continue
 
             title = (entry.get("title") or "").strip() or url
-            logger.info(f"  送 STT:{channel.name} / {title}")
-            transcript = self.stt.transcribe(url, topic=title[:80])
-            if not transcript:
-                logger.warning(f"  STT 失敗,跳過:{url}")
-                continue
+            logger.info(f"  新增 link+title:{channel.name} / {title}")
 
             out.append(RawNewsEvent(
                 source_type=self.source_type,
@@ -109,7 +105,7 @@ class MediaCollector:
                 title=title,
                 url=url,
                 created_at=published,
-                body=transcript,
+                body="",  # STT 改由 UI 手動觸發,寫進 events.body
                 feed_name=channel.name,
                 score=0,
             ))

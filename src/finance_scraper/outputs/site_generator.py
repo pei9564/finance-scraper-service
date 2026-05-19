@@ -88,7 +88,19 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   #pipeline-progress .src-row.error .src-name { color: #f85149; }
 
   .feed-source-label { padding: 12px 16px 4px; font-size: 11px;
-    color: #6e7681; text-transform: uppercase; letter-spacing: 0.5px; }
+    color: #6e7681; text-transform: uppercase; letter-spacing: 0.5px;
+    display: flex; align-items: center; gap: 4px; }
+  .feed-source-info { background: transparent; border: none; cursor: pointer;
+    color: #6e7681; font-size: 12px; padding: 0 4px; line-height: 1;
+    font-family: inherit; }
+  .feed-source-info:hover { color: #8b949e; }
+  .info-popover { position: fixed; background: #161b22; border: 1px solid #30363d;
+    border-radius: 6px; padding: 10px 12px; max-width: 300px; z-index: 1000;
+    font-size: 12px; color: #c9d1d9; line-height: 1.55; box-shadow: 0 4px 12px #0008;
+    text-transform: none; letter-spacing: normal; }
+  .info-popover strong { color: #58a6ff; }
+  .info-popover code { background: #30363d; padding: 0 4px; border-radius: 3px;
+    font-size: 11px; }
   .feed-row { padding: 6px 16px; cursor: pointer; font-size: 13px;
     display: flex; align-items: center; gap: 6px; }
   .feed-row:hover { background: #21262d; }
@@ -132,6 +144,12 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .date-group .date-text { font-weight: 600; }
   .date-group .date-count { font-size: 12px; color: #8b949e; font-weight: 400;
     margin-left: auto; }
+  .stt-btn { font-size: 11px; padding: 3px 10px; background: transparent;
+    border: 1px solid #d2992288; border-radius: 4px; color: #e3b341;
+    cursor: pointer; font-family: inherit; }
+  .stt-btn:hover:not(:disabled) { background: #d2992218; }
+  .stt-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
   .retry-source-btn { font-size: 11px; padding: 3px 10px; background: transparent;
     border: 1px solid #e3b34155; border-radius: 5px; color: #e3b341; cursor: pointer;
     white-space: nowrap; flex-shrink: 0; }
@@ -263,6 +281,60 @@ const SOURCE_CATEGORY = {
   podcast_tech: "🎙️ Podcast",
   podcast_fin: "🎙️ Podcast",
 };
+// 每個分類的處理鏈 / 手動觸發說明 — 點 ⓘ 顯示
+const SOURCE_INFO_TEXT = {
+  news: "<strong>📰 新聞</strong><br>" +
+        "自動:<code>translate → fetch_body</code>(蒐集時 RSS/API 抓取後做翻譯與內文擷取)<br>" +
+        "手動:摘要點群組標題旁的「補摘要」鈕。<br>" +
+        "LLM 不可用:標題改走 deep-translator(Google);中文 feed 直接跳過翻譯。",
+  paper: "<strong>📄 論文</strong><br>" +
+         "來源:arXiv + HuggingFace Daily Papers<br>" +
+         "自動:<code>translate</code>(LLM 不可用時略過 arXiv,HF Daily Papers 仍會收)<br>" +
+         "手動:摘要點群組標題旁的「補摘要」鈕。",
+  finance: "<strong>💰 財經</strong><br>" +
+           "來源:CNBC / Yahoo / 經濟日報 / MarketWatch 等 RSS<br>" +
+           "自動:<code>translate</code>(中文 feed 跳過;英文 feed LLM 不可用會 fallback Google)<br>" +
+           "手動:摘要點群組標題旁的「補摘要」鈕。",
+  media: "<strong>📺 YouTube / 🎙️ Podcast</strong><br>" +
+         "蒐集只抓 link+title,<strong>STT 不會自動跑</strong>。<br>" +
+         "手動 1:每張卡片右上「🎙️ 送 STT」單獨送該影片轉逐字稿(可同時送多支)。<br>" +
+         "手動 2:STT 完成 body 有了之後,點群組「補摘要」做摘要。<br>" +
+         "去重:DB 已存過的 url 不會再被蒐集重複出現。",
+};
+
+function infoKeyForSource(source) {
+  if (source.startsWith("youtube_") || source.startsWith("podcast_")) return "media";
+  return source;  // news / paper / finance
+}
+
+let _infoPopover = null;
+function closeSourceInfo() {
+  if (_infoPopover) { _infoPopover.remove(); _infoPopover = null; }
+}
+function toggleSourceInfo(ev, btn) {
+  ev.stopPropagation();
+  const wasOpen = _infoPopover && _infoPopover.dataset.forKey === btn.dataset.infoKey;
+  closeSourceInfo();
+  if (wasOpen) return;  // 點同一個再點 = 關閉
+  const text = SOURCE_INFO_TEXT[btn.dataset.infoKey];
+  if (!text) return;
+  const pop = document.createElement("div");
+  pop.className = "info-popover";
+  pop.dataset.forKey = btn.dataset.infoKey;
+  pop.innerHTML = text;
+  document.body.appendChild(pop);
+  const r = btn.getBoundingClientRect();
+  // 預設貼右側,若會超出視窗就改成貼左側下方
+  const popW = pop.offsetWidth;
+  let left = r.right + 6;
+  if (left + popW > window.innerWidth - 8) left = Math.max(8, r.left - popW - 6);
+  pop.style.left = left + "px";
+  pop.style.top = r.top + "px";
+  _infoPopover = pop;
+  // 下個 tick 才掛 click,避免 stopPropagation 後仍命中自己
+  setTimeout(() => document.addEventListener("click", closeSourceInfo, { once: true }), 0);
+}
+
 // FEEDS 由 /api/feeds 注入
 let FEEDS = [];
 // COLLECTIONS 由 /api/collections 注入；每筆含 key/label/type/months
@@ -370,7 +442,10 @@ function renderFeedSidebar() {
   for (const [cat, feeds] of groups) {
     const label = document.createElement("div");
     label.className = "feed-source-label";
-    label.textContent = cat;
+    const infoKey = infoKeyForSource(feeds[0].source);
+    label.innerHTML = '<span>' + escapeHtml(cat) + '</span>' +
+      '<button class="feed-source-info" data-info-key="' + infoKey +
+      '" onclick="toggleSourceInfo(event, this)" title="處理鏈與 fallback 說明">ⓘ</button>';
     list.appendChild(label);
     for (const f of feeds) {
       const row = document.createElement("div");
@@ -666,6 +741,48 @@ async function retrySummary(date, source, feed_name) {
   } catch {
     updateStatusBar({ running: false, error: "無法連線" });
   }
+}
+
+// ── per-event STT (media 手動觸發) ────────────────────────────────────────
+async function triggerStt(btn, uid) {
+  btn.disabled = true;
+  btn.textContent = "🎙️ STT 提交中…";
+  try {
+    const res = await fetch("/api/transcribe-event?uid=" + encodeURIComponent(uid),
+      { method: "POST" });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      btn.textContent = "❌ " + (j.detail || "提交失敗");
+      setTimeout(() => { btn.disabled = false; btn.textContent = "🎙️ 送 STT"; }, 5000);
+      return;
+    }
+    btn.textContent = "🎙️ STT 中…(可能數分鐘)";
+    pollSttStatus(btn, uid);
+  } catch {
+    btn.textContent = "❌ 連線失敗";
+    setTimeout(() => { btn.disabled = false; btn.textContent = "🎙️ 送 STT"; }, 5000);
+  }
+}
+
+function pollSttStatus(btn, uid) {
+  const timer = setInterval(async () => {
+    // 按鈕已被重繪移除就停止輪詢
+    if (!document.body.contains(btn)) { clearInterval(timer); return; }
+    try {
+      const r = await fetch("/api/transcribe-event/status?uid=" + encodeURIComponent(uid));
+      const s = await r.json();
+      if (s.status === "done") {
+        clearInterval(timer);
+        btn.textContent = "✅ 已轉錄 (" + (s.length || 0) + " 字)";
+        // 重抓當前 feed 讓卡片更新(body 出現 → STT 按鈕消失)
+        if (currentFeed) selectFeed(currentFeed.source, currentFeed.feed_name);
+      } else if (s.status === "error") {
+        clearInterval(timer);
+        btn.textContent = "❌ " + (s.error || "失敗");
+        setTimeout(() => { btn.disabled = false; btn.textContent = "🎙️ 送 STT"; }, 6000);
+      }
+    } catch {}
+  }, 8000);
 }
 
 // ── monthly run ───────────────────────────────────────────────────────────
@@ -978,6 +1095,12 @@ function cardHtml(e) {
   if (e.source === "paper") origin = esc((e.categories || []).slice(0, 2).join(", "));
   else origin = esc(e.feed_name || "");  // news / finance / youtube_* / podcast_* 都用 feed_name
   const noSummary = !e.ai_summary;
+  const isMedia = e.source && (e.source.startsWith("youtube_") || e.source.startsWith("podcast_"));
+  const needsStt = isMedia && !(e.body || "").trim();
+  const sttBtn = (needsStt && e.uid)
+    ? `<button class="stt-btn" data-stt-uid="${esc(e.uid)}"
+        onclick="triggerStt(this, '${esc(e.uid)}')">🎙️ 送 STT</button>`
+    : "";
   const isOn = e.uid && BOOKMARKED_UIDS.has(e.uid);
   const star = e.uid
     ? `<button class="bookmark-btn ${isOn ? "on" : ""}" data-uid="${esc(e.uid)}"
@@ -994,6 +1117,7 @@ function cardHtml(e) {
       ? `<span class="badge impact-${e.impact_level}">${e.impact_level}</span>` : "",
     e.score ? `<span>▲ ${e.score}</span>` : "",
     noSummary ? `<span class="badge no-summary">摘要待重跑</span>` : "",
+    sttBtn,
     star,
   ].filter(Boolean).join("");
   const tags = (e.tags || []).length

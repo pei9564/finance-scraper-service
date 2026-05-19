@@ -57,6 +57,10 @@ _monthly_lock = asyncio.Lock()
 _monthly_state: dict = {"running": False, "month": None, "error": None}
 _releases_lock = asyncio.Lock()
 _releases_state: dict = {"running": False, "lookback": None, "error": None}
+# 手動 STT — 每個 uid 一筆狀態,允許多支影片同時送 STT。
+# status: "running" / "done" / "error";error 時帶 error 訊息。done 後過幾秒會被前端讀走清掉。
+_transcribe_jobs: dict[str, dict] = {}
+_transcribe_lock = asyncio.Lock()
 
 
 # ── lifespan / app ──────────────────────────────────────────────────────────
@@ -271,6 +275,37 @@ async def run_pipeline(date: str | None = None):
     return _no_cache_json({"started": True, "date": date, "mode": "full"})
 
 
+@app.post("/api/transcribe-event")
+async def post_transcribe_event(uid: str):
+    """手動觸發單一 media 事件的 STT。背景跑,前端用 /api/transcribe-event/status?uid 輪詢。
+
+    回 202 後直接 fire-and-forget;結果寫進 events.body 並更新 _transcribe_jobs[uid]。
+    """
+    if not uid:
+        raise HTTPException(400, "需要 uid 參數")
+    event = await daily.get_event_by_uid(uid)
+    if event is None:
+        raise HTTPException(404, "事件不存在")
+    if not (event.get("source") or "").startswith(("youtube_", "podcast_")):
+        raise HTTPException(400, "只支援 media 事件(youtube_* / podcast_*)")
+    if (event.get("body") or "").strip():
+        raise HTTPException(409, "已有逐字稿,如要重做請先清空 body")
+    async with _transcribe_lock:
+        cur = _transcribe_jobs.get(uid)
+        if cur and cur.get("status") == "running":
+            raise HTTPException(409, "此事件已在 STT 中")
+        _transcribe_jobs[uid] = {"status": "running"}
+    asyncio.create_task(_run_transcribe(uid, event["url"], event["title"]))
+    return _no_cache_json({"uid": uid, "status": "running"})
+
+
+@app.get("/api/transcribe-event/status")
+async def get_transcribe_status(uid: str):
+    if not uid:
+        raise HTTPException(400, "需要 uid 參數")
+    return _no_cache_json(_transcribe_jobs.get(uid) or {"status": "idle"})
+
+
 @app.post("/api/retry-summary")
 async def post_retry_summary(date: str, source: str, feed_name: str | None = None):
     if not date or not source:
@@ -377,6 +412,26 @@ async def _run_monthly_task() -> None:
     except Exception as e:
         async with _monthly_lock:
             _monthly_state.update(running=False, error=str(e))
+
+
+async def _run_transcribe(uid: str, url: str, title: str) -> None:
+    """背景跑 STT(在 thread 內阻塞輪詢),完成後寫回 events.body。"""
+    from finance_scraper.infrastructure import STTClient
+    try:
+        stt = STTClient()  # base_url / language 都從 env(STT_BASE_URL / STT_LANGUAGE)
+        text = await asyncio.to_thread(stt.transcribe, url, (title or "")[:80])
+        if not text:
+            _transcribe_jobs[uid] = {"status": "error", "error": "STT 無回應或失敗"}
+            return
+        ok = await daily.update_event_body(uid, text)
+        if not ok:
+            _transcribe_jobs[uid] = {"status": "error", "error": "寫入 DB 失敗(uid 不存在?)"}
+            return
+        _transcribe_jobs[uid] = {"status": "done", "length": len(text)}
+        logger.info(f"手動 STT 完成 uid={uid} ({len(text)} 字)")
+    except Exception as e:
+        logger.exception("手動 STT 失敗")
+        _transcribe_jobs[uid] = {"status": "error", "error": str(e)}
 
 
 async def _run_releases_task(lookback: int) -> None:

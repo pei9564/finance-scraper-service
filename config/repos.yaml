@@ -180,29 +180,31 @@ ai:
     podcast_fin: *media_summary
 
 # 各來源的開關與逐則處理步驟鏈（步驟名稱對應 sources/registry.py 的 STEP_FACTORIES）
+# summarize 從 auto 步驟移除 — 透過 UI 的「補摘要」鈕(by date+source)手動觸發,
+# 避免每次蒐集都打 LLM。media 來源 STT 也改成 UI 上 per-event 手動觸發。
 sources:
   news:
     enabled: true
-    steps: [translate, fetch_body, summarize]
+    steps: [translate, fetch_body]
   paper:
     enabled: true
-    steps: [translate, summarize]
+    steps: [translate]
   finance:
     enabled: true
-    steps: [translate, summarize]
+    steps: [translate]
   # 預設關閉 - channels 為空時也不會做事;設好 channels 後再 enabled: true
   youtube_tech:
     enabled: false
-    steps: [translate, summarize]
+    steps: [translate]
   youtube_fin:
     enabled: true
-    steps: [translate, summarize]
+    steps: [translate]
   podcast_tech:
     enabled: false
-    steps: [translate, summarize]
+    steps: [translate]
   podcast_fin:
     enabled: false
-    steps: [translate, summarize]
+    steps: [translate]
 
 # 各輸出目標的開關
 outputs:

@@ -356,3 +356,27 @@ async def update_event_summary(uid: str, ai_summary: str, body: str | None) -> b
                 ai_summary, uid,
             )
     return result.endswith(" 1")
+
+
+async def get_event_by_uid(uid: str) -> dict[str, Any] | None:
+    """單一事件查詢 — 給 /api/transcribe-event 確認 url/title/source 與 body 狀態。"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT uid, source, repo, event_type, classification, title, url,
+                      created_at, impact_level, ai_summary, body, tags, migration_steps,
+                      feed_name, score, authors, categories, arxiv_id
+               FROM events WHERE uid = $1""",
+            uid,
+        )
+    return _row_to_event_dict(row) if row else None
+
+
+async def update_event_body(uid: str, body: str) -> bool:
+    """手動 STT 完成後寫回 body — 不動 ai_summary,後續走「補摘要」按鈕。"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE events SET body = $1 WHERE uid = $2", body, uid,
+        )
+    return result.endswith(" 1")
