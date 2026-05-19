@@ -93,6 +93,9 @@ async def upsert_run(day_str: str, daily_summary: str, events: list[dict[str, An
                     list(e.get("categories") or []),
                     e.get("arxiv_id"),
                 ))
+            # uid 是全域 PK,而上面只 DELETE 同日;同一篇跨日重複出現
+            # (RSS 重發、YouTube lookback、arXiv 跨日重映)時會撞舊資料,
+            # 故走 upsert 以最新 run 的內容為準。
             await conn.executemany(
                 """INSERT INTO events (
                     uid, date, position, source, repo, event_type, classification,
@@ -100,7 +103,27 @@ async def upsert_run(day_str: str, daily_summary: str, events: list[dict[str, An
                     tags, migration_steps, feed_name, score, authors, categories,
                     arxiv_id
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
-                          $14,$15,$16,$17,$18,$19,$20)""",
+                          $14,$15,$16,$17,$18,$19,$20)
+                   ON CONFLICT (uid) DO UPDATE SET
+                     date            = EXCLUDED.date,
+                     position        = EXCLUDED.position,
+                     source          = EXCLUDED.source,
+                     repo            = EXCLUDED.repo,
+                     event_type      = EXCLUDED.event_type,
+                     classification  = EXCLUDED.classification,
+                     title           = EXCLUDED.title,
+                     url             = EXCLUDED.url,
+                     created_at      = EXCLUDED.created_at,
+                     impact_level    = EXCLUDED.impact_level,
+                     ai_summary      = EXCLUDED.ai_summary,
+                     body            = EXCLUDED.body,
+                     tags            = EXCLUDED.tags,
+                     migration_steps = EXCLUDED.migration_steps,
+                     feed_name       = EXCLUDED.feed_name,
+                     score           = EXCLUDED.score,
+                     authors         = EXCLUDED.authors,
+                     categories      = EXCLUDED.categories,
+                     arxiv_id        = EXCLUDED.arxiv_id""",
                 rows,
             )
 
