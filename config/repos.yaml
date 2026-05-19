@@ -124,6 +124,9 @@ ai:
   vllm_base_url: "http://localhost:8000/v1"
   vllm_model: ""  # 留空自動偵測
   # 各來源的逐則摘要設定（指令文字與長度可直接在此調整，不用改程式）
+  # gateway 後端(GLM / Qwen 等)是 reasoning 模型,LLMGatewayClient 已用
+  # chat_template_kwargs.enable_thinking=False 關掉 thinking,所以 max_tokens
+  # 不必預留 reasoning 空間,只要夠寫摘要本身即可。
   summary_profiles:
     news:
       max_tokens: 600

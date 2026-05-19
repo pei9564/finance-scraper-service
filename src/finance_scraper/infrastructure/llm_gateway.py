@@ -41,6 +41,10 @@ class LLMGatewayClient:
             ],
             "max_tokens": max_tokens,
             "temperature": temperature,
+            # 內部 gateway 後端模型(GLM / Qwen 系列)預設會啟用 reasoning,先把
+            # max_tokens 預算花光在思考過程,content 就會空白。摘要只需要結果,
+            # 關掉 thinking 速度也快很多。內部 gateway 已實測支援此 kwarg。
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         with httpx.Client(timeout=120) as client:
             resp = client.post(
@@ -49,7 +53,22 @@ class LLMGatewayClient:
                 headers={"Authorization": f"Bearer {self.api_key}"},
             )
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"].strip()
+            data = resp.json()
+            choice = data["choices"][0]
+            msg = choice["message"]
+            # gateway 偶爾會回 content=null(過載 / 內部錯誤),先轉空字串再 strip,
+            # 否則上層會吃到 NoneType.strip 例外
+            content = (msg.get("content") or "").strip()
+            if not content:
+                # reasoning 模型(GLM 等)會先寫 reasoning,token 用完才寫 content;
+                # 若 content 空但 reasoning 有東西且 finish_reason=length,代表
+                # max_tokens 不夠,需要在 config 加大
+                reasoning_len = len(msg.get("reasoning") or "")
+                logger.warning(
+                    f"LLM 回傳空 content(finish_reason={choice.get('finish_reason')}, "
+                    f"reasoning_chars={reasoning_len}) — 可能 max_tokens 太低"
+                )
+            return content
 
     def _model_name(self) -> str:
         if self.model:

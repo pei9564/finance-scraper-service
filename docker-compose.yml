@@ -16,6 +16,8 @@ services:
       VLLM_BASE_URL: ${VLLM_BASE_URL:-http://host.docker.internal:8000/v1}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      # 內網 hostname,容器拿不到 host 的 systemd-resolved,直接寫死 IP
+      - "llm-gateway.example.com:192.0.2.10"
     volumes:
       # local 開發：mount 覆蓋 image 內建 config，改 yaml 不用 rebuild
       - ./config:/app/config:ro
