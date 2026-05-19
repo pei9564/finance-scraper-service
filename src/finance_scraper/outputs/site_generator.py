@@ -205,7 +205,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     <div id="pipeline-progress" hidden></div>
     <div id="daily-sidebar">
       <div style="padding: 4px 16px 8px">
-        <button class="run-today-btn" id="run-today-btn" onclick="runToday()">▶ 執行今天</button>
+        <button class="run-today-btn" id="run-today-btn" onclick="runToday()">▶ 蒐集今天</button>
       </div>
       <div id="feed-list"></div>
     </div>
@@ -716,7 +716,7 @@ function updateStatusBar(s) {
   const panel = document.getElementById("pipeline-progress");
   const btns = document.querySelectorAll(".retry-source-btn, .run-today-btn");
   if (s.running) {
-    const label = s.mode && s.mode.startsWith("retry:") ? `補摘要 ${s.mode.split(":")[1]}` : "執行中";
+    const label = s.mode && s.mode.startsWith("retry:") ? `補摘要 ${s.mode.split(":")[1]}` : "蒐集中";
     el.className = "running"; el.textContent = `⚡ ${label} ${s.date || ""}`;
     btns.forEach(b => b.disabled = true);
     renderProgressPanel(s);
