@@ -108,6 +108,15 @@ media:
       - name: "老王愛說笑"
         url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCvnLmiWt_zIVIh0zUm_j4Hw"
         lang: zh
+      - name: "游庭皓的財經皓角"
+        url: "https://www.youtube.com/feeds/videos.xml?channel_id=UC0lbAQVpenvfA2QqzsRtL_g"
+        lang: zh
+      - name: "清流君"
+        url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCeTLfPD7thTMabtL7w87Aug"
+        lang: zh
+      - name: "財女珍妮"
+        url: "https://www.youtube.com/feeds/videos.xml?channel_id=UCdwPn2TO60Ec8QDIFRx50lQ"
+        lang: zh
   podcast_tech:
     channels: []
   podcast_fin:
