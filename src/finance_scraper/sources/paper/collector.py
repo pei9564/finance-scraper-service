@@ -112,6 +112,7 @@ class PaperCollector:
                 url=result.entry_id,
                 created_at=result.published.replace(tzinfo=timezone.utc),
                 body=result.summary.replace("\n", " ").strip() if result.summary else None,
+                body_lang="en",  # arXiv 摘要一律英文
                 authors=[a.name for a in result.authors[:5]],
                 categories=list(result.categories),
                 arxiv_id=arxiv_id,
@@ -147,6 +148,7 @@ class PaperCollector:
                 url=f"https://arxiv.org/abs/{arxiv_id}",
                 created_at=published.astimezone(timezone.utc),
                 body=(paper.get("summary") or item.get("summary") or "").strip() or None,
+                body_lang="en",  # HF Daily Papers 摘要也是英文
                 authors=authors,
                 categories=["HF Daily"],
                 arxiv_id=arxiv_id,

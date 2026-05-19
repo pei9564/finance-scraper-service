@@ -44,8 +44,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
              flex-shrink: 0; height: 100vh; position: sticky; top: 0;
              display: flex; flex-direction: column; }
   #sidebar-scroll { flex: 1; overflow-y: auto; padding: 16px 0 8px; }
-  #sidebar-footer { padding: 10px 16px; border-top: 1px solid #30363d;
-    background: #161b22; }
+  /* 蒐集鈕 + 狀態列 + 進度面板都搬到 footer,固定在側邊欄底部不跟著捲動。
+     縱向堆疊 + 適度 gap,不會跟 LLM 測試擠在一起 */
+  #sidebar-footer { padding: 10px 12px; border-top: 1px solid #30363d;
+    background: #161b22; display: flex; flex-direction: column; gap: 8px; }
   #sidebar h1 { font-size: 17px; font-weight: 700; padding: 4px 16px 12px;
     color: #f0f6fc; letter-spacing: 0.2px; }
 
@@ -64,16 +66,19 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
               cursor: pointer; background: transparent; color: #8b949e; border: none; }
   .mode-btn.active { background: #1f6feb; color: #fff; }
 
-  #pipeline-status { padding: 2px 16px 8px; font-size: 12px; color: #8b949e; min-height: 18px;
+  /* 狀態列 — 沒在跑時為空字串,用 :empty 隱掉避免在 footer 留空隙 */
+  #pipeline-status { padding: 4px 4px; font-size: 12px; color: #8b949e;
     background: none; border: none; text-align: left; width: 100%; cursor: default;
-    font-family: inherit; }
+    font-family: inherit; line-height: 1.4; }
+  #pipeline-status:empty { display: none; }
   #pipeline-status.running { color: #e3b341; cursor: pointer; }
   #pipeline-status.running:hover { color: #f0b850; }
   #pipeline-status.running::after { content: " ▾"; opacity: 0.6; font-size: 10px; }
   #pipeline-status.error { color: #f85149; }
 
-  #pipeline-progress { padding: 6px 16px 10px; font-size: 11px; color: #c9d1d9;
-    background: #0d1117; border-top: 1px solid #21262d; border-bottom: 1px solid #21262d;
+  /* 進度面板 — 在 footer 內,給 card 樣式取代原本的 「橫條夾在 sidebar 中段」設計 */
+  #pipeline-progress { padding: 8px 10px; font-size: 11px; color: #c9d1d9;
+    background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
     line-height: 1.6; }
   #pipeline-progress[hidden] { display: none; }
   #pipeline-progress .row { display: flex; justify-content: space-between; gap: 6px; }
@@ -106,6 +111,17 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     background: transparent; border: none; color: #6e7681; cursor: pointer;
     font-size: 14px; line-height: 1; padding: 4px 6px; font-family: inherit; }
   .info-popover .info-close:hover { color: #f0f6fc; }
+  /* 結構化排版:標題置頂,每列「標籤 + 值」對齊好掃讀 */
+  .info-popover .info-title { font-size: 13px; font-weight: 600;
+    color: #58a6ff; margin-bottom: 10px; padding-right: 16px; }
+  .info-popover .info-row { display: flex; gap: 10px; line-height: 1.55;
+    margin-bottom: 3px; font-size: 12px; }
+  .info-popover .info-row:last-child { margin-bottom: 0; }
+  .info-popover .info-row .info-label { color: #6e7681; flex-shrink: 0;
+    width: 38px; }
+  .info-popover .info-row .info-value { flex: 1; color: #c9d1d9; }
+  .info-popover .info-row .info-value code { background: #30363d;
+    padding: 0 4px; border-radius: 3px; font-size: 11px; }
   .feed-row { padding: 6px 16px; cursor: pointer; font-size: 13px;
     display: flex; align-items: center; gap: 6px; }
   .feed-row:hover { background: #21262d; }
@@ -119,6 +135,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .feed-dot.ok { background: #3fb95066; }
   .feed-dot.warn { background: #e3b341; }
   .feed-dot.bad { background: #f85149; }
+  .feed-dot.info { background: #58a6ff; }
   .feed-row.active .feed-dot.ok { background: #ffffff66; }
 
   .run-today-btn { width: 100%; font-size: 12px; padding: 6px 0; background: transparent;
@@ -164,15 +181,17 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .stt-btn:hover:not(:disabled) { background: #d2992218; }
   .stt-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-  /* 預設低存在感(borderless 灰):大多時候在「沒缺」情況下用來強制重跑。
-     has-missing 時升級為黃色 chip 吸引注意 — 視覺重點放在「需要關注的」 */
-  .retry-source-btn { font-size: 11px; padding: 3px 10px; background: transparent;
-    border: 1px solid transparent; border-radius: 5px; color: #6e7681; cursor: pointer;
-    white-space: nowrap; flex-shrink: 0; font-family: inherit; }
-  .retry-source-btn:hover:not(:disabled) { color: #c9d1d9; background: #21262d; }
-  .retry-source-btn.has-missing { border-color: #e3b34155; color: #e3b341; }
-  .retry-source-btn.has-missing:hover:not(:disabled) { background: #e3b34118; color: #e3b341; }
-  .retry-source-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* date-group 上的兩個 stage 鈕:翻譯(黃)/摘要(藍)。
+     ≥1 時帶 border 凸顯,=0 時隱藏(沒事可做就別占位)。 */
+  .stage-btn { font-size: 11px; padding: 3px 10px; background: transparent;
+    border-radius: 5px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    font-family: inherit; }
+  .stage-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .stage-btn[hidden] { display: none; }
+  .stage-btn.translate { border: 1px solid #e3b34155; color: #e3b341; }
+  .stage-btn.translate:hover:not(:disabled) { background: #e3b34118; }
+  .stage-btn.summarize { border: 1px solid #1f6feb88; color: #58a6ff; }
+  .stage-btn.summarize:hover:not(:disabled) { background: #1f6feb18; }
   .date-group .cards { padding: 0 14px 14px; }
 
   /* ── cards ── */
@@ -194,6 +213,11 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .badge.impact-Breaking { background: #f8514933; color: #f85149; }
   .badge.impact-High { background: #db6d2833; color: #db6d28; }
   .badge.no-summary { background: #30363d; color: #8b949e; font-style: italic; }
+  /* 統一資料流的階段狀態徽章 — 顏色語意:STT=橙(需採集)、翻譯=黃、摘要=藍 */
+  .badge.stage-stt { background: #d2992233; color: #e3b341; }
+  .badge.stage-translate { background: #e3b34122; color: #e3b341; }
+  .badge.stage-summarize { background: #1f6feb22; color: #58a6ff; }
+  .badge.stage-empty { background: #30363d; color: #6e7681; }
   .badge.rank { background: #6e40c933; color: #bc8cff; font-weight: 600; }
   .badge.lang { background: #21262d; color: #8b949e; }
   .card-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
@@ -298,12 +322,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
       <button class="mode-btn active" id="btn-daily" onclick="setMode('daily')">日報</button>
       <button class="mode-btn" id="btn-collections" onclick="setMode('collections')">資料庫</button>
     </div>
-    <button id="pipeline-status" onclick="toggleProgressPanel()"></button>
-    <div id="pipeline-progress" hidden></div>
     <div id="daily-sidebar">
-      <div style="padding: 4px 16px 8px">
-        <button class="run-today-btn" id="run-today-btn" onclick="runToday()">▶ 蒐集今天</button>
-      </div>
       <div id="feed-list"></div>
     </div>
     <div id="collections-sidebar" style="display:none">
@@ -314,6 +333,10 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
   <div id="sidebar-footer">
+    <!-- 蒐集動作 + 進度狀態移到 footer:常駐視覺位置,切換 daily/collections 不消失 -->
+    <button class="run-today-btn" id="run-today-btn" onclick="runToday()">▶ 蒐集今天</button>
+    <button id="pipeline-status" onclick="toggleProgressPanel()"></button>
+    <div id="pipeline-progress" hidden></div>
     <button class="llm-test-btn" id="llm-test-btn" onclick="testLlm()">🔌 測試 LLM</button>
     <div id="llm-test-detail"></div>
   </div>
@@ -361,25 +384,52 @@ const SOURCE_CATEGORY = {
   podcast_fin: "🎙️ Podcast",
 };
 // 每個分類的處理鏈 / 手動觸發說明 — 點 ⓘ 顯示
+// 結構化的 source 說明 — 每個 source 統一四欄(來源/蒐集/流程/備註),
+// 渲染時自動拼成「標籤 + 值」表格,前端只負責照 schema 畫。
 const SOURCE_INFO_TEXT = {
-  news: "<strong>📰 新聞</strong><br>" +
-        "自動：<code>translate → fetch_body</code>（蒐集時 RSS/API 抓取後做翻譯與內文擷取）<br>" +
-        "手動：摘要點群組標題旁的「補摘要」鈕。<br>" +
-        "LLM 不可用：標題改走 deep-translator(Google)；中文 feed 直接跳過翻譯。",
-  paper: "<strong>📄 論文</strong><br>" +
-         "來源：arXiv + HuggingFace Daily Papers<br>" +
-         "自動：<code>translate</code>（LLM 不可用時略過 arXiv,HF Daily Papers 仍會收）<br>" +
-         "手動：摘要點群組標題旁的「補摘要」鈕。",
-  finance: "<strong>💰 財經</strong><br>" +
-           "來源：CNBC / Yahoo / 經濟日報 / MarketWatch 等 RSS<br>" +
-           "自動：<code>translate</code>（中文 feed 跳過；英文 feed LLM 不可用會 fallback Google）<br>" +
-           "手動：摘要點群組標題旁的「補摘要」鈕。",
-  media: "<strong>📺 YouTube / 🎙️ Podcast</strong><br>" +
-         "蒐集只抓 link+title,<strong>STT 不會自動跑</strong>。<br>" +
-         "手動 1：每張卡片右上「🎙️ 送 STT」單獨送該影片轉逐字稿（可同時送多支）。<br>" +
-         "手動 2：STT 完成 body 有了之後，點群組「補摘要」做摘要。<br>" +
-         "去重：DB 已存過的 url 不會再被蒐集重複出現。",
+  news: {
+    title: "📰 新聞",
+    rows: [
+      ["來源", "HackerNews + RSS (TechCrunch / The Verge)"],
+      ["蒐集", "自動補爬全文 <code>fetch_body</code>"],
+      ["流程", "🌐 翻譯 → 📝 摘要"],
+      ["備註", "LLM 失敗 fallback Google 翻譯"],
+    ],
+  },
+  paper: {
+    title: "📄 論文",
+    rows: [
+      ["來源", "arXiv + HuggingFace Daily Papers"],
+      ["蒐集", "title + abstract (英文)"],
+      ["流程", "🌐 翻譯 → 📝 摘要"],
+    ],
+  },
+  finance: {
+    title: "💰 財經",
+    rows: [
+      ["來源", "CNBC / Yahoo / MarketWatch / 經濟日報"],
+      ["流程", "🌐 翻譯 → 📝 摘要"],
+      ["備註", "中文 feed (經濟日報) 跳翻譯,直接摘要"],
+    ],
+  },
+  media: {
+    title: "📺 YouTube / 🎙️ Podcast",
+    rows: [
+      ["蒐集", "只取 link + title,body 為空"],
+      ["流程", "🎙️ STT → 🌐 翻譯 → 📝 摘要"],
+      ["STT", "每張卡片右上鈕單獨觸發 (可並行)"],
+      ["備註", "中文頻道 STT 後跳翻譯;url 不重蒐集"],
+    ],
+  },
 };
+
+function buildInfoHtml(info) {
+  const rows = info.rows.map(([k, v]) =>
+    '<div class="info-row"><span class="info-label">' + k +
+    '</span><span class="info-value">' + v + '</span></div>'
+  ).join("");
+  return '<div class="info-title">' + info.title + '</div>' + rows;
+}
 
 function infoKeyForSource(source) {
   if (source.startsWith("youtube_") || source.startsWith("podcast_")) return "media";
@@ -395,13 +445,13 @@ function toggleSourceInfo(ev, btn) {
   const wasOpen = _infoPopover && _infoPopover.dataset.forKey === btn.dataset.infoKey;
   closeSourceInfo();
   if (wasOpen) return;  // 點同一個再點 = 關閉
-  const text = SOURCE_INFO_TEXT[btn.dataset.infoKey];
-  if (!text) return;
+  const info = SOURCE_INFO_TEXT[btn.dataset.infoKey];
+  if (!info) return;
   const pop = document.createElement("div");
   pop.className = "info-popover";
   pop.dataset.forKey = btn.dataset.infoKey;
   // ✕ 鈕本身不需要 onclick — 任何 click 都會觸發既有的 document close handler
-  pop.innerHTML = '<button class="info-close" aria-label="關閉">✕</button>' + text;
+  pop.innerHTML = '<button class="info-close" aria-label="關閉">✕</button>' + buildInfoHtml(info);
   document.body.appendChild(pop);
   const r = btn.getBoundingClientRect();
   // 預設貼右側,若會超出視窗就改成貼左側下方
@@ -469,7 +519,9 @@ function setMode(m) {
   document.getElementById("collections-sidebar").style.display = m === "collections" ? "" : "none";
   document.getElementById("daily-view").style.display = m === "daily" ? "" : "none";
   document.getElementById("collection-view").style.display = m === "collections" ? "" : "none";
-  document.getElementById("pipeline-status").style.display = m === "daily" ? "" : "none";
+  // run-today 只在 daily 有意義;pipeline-status 留下來 — 蒐集/翻譯/摘要的進度
+  // 跨 mode 也該被看到,不然切到 collections 就以為任務消失了
+  document.getElementById("run-today-btn").style.display = m === "daily" ? "" : "none";
 }
 
 // ── init ──────────────────────────────────────────────────────────────────
@@ -515,13 +567,27 @@ function feedDisplayLabel(source, feed_name) {
   return SOURCE_LABELS[source]?.split(" ")[0] + " " + (feed_name || "(無 feed)");
 }
 
-// missing/count → 小圓點 class + title text;ratio≥0.5 視為「多數缺」,亮紅
-function feedHealth(missing, count) {
-  if (!count || missing <= 0) return { cls: "ok", title: count ? "全部已摘要" : "尚無資料" };
-  const ratio = missing / count;
-  const pct = Math.round(ratio * 100);
-  if (ratio >= 0.5) return { cls: "bad", title: missing + " / " + count + " 缺摘要 (" + pct + "%)" };
-  return { cls: "warn", title: missing + " / " + count + " 缺摘要 (" + pct + "%)" };
+// 統一資料流:看 stt/translate/summarize 各段卡多少。顏色 = 最重的那段
+//   red    需 STT(主因)
+//   yellow 需翻譯(主因)
+//   blue   需摘要(主因)
+//   green  全部完成
+function feedHealth(f) {
+  const count = f.count || 0;
+  const stt = f.missing_body || 0;
+  const tr  = f.needs_translate || 0;
+  const su  = f.needs_summary || 0;
+  if (!count) return { cls: "ok", title: "尚無資料" };
+  if (stt === 0 && tr === 0 && su === 0) return { cls: "ok", title: "全部完成" };
+  const parts = [];
+  if (stt > 0) parts.push("STT " + stt);
+  if (tr > 0)  parts.push("翻譯 " + tr);
+  if (su > 0)  parts.push("摘要 " + su);
+  const title = "卡關:" + parts.join(" / ") + " (共 " + count + ")";
+  // 優先序:STT > 翻譯 > 摘要 — 越前面越紅,因為越後段才會卡
+  if (stt >= tr && stt >= su && stt > 0) return { cls: "bad", title };
+  if (tr >= su && tr > 0) return { cls: "warn", title };
+  return { cls: "info", title };
 }
 
 function renderFeedSidebar() {
@@ -532,14 +598,18 @@ function renderFeedSidebar() {
   const allRow = document.createElement("div");
   allRow.className = "feed-row active";
   allRow.dataset.key = feedKey(null, null);
-  const totalMissing = FEEDS.reduce((s, f) => s + (f.missing || 0), 0);
-  const totalCount = FEEDS.reduce((s, f) => s + (f.count || 0), 0);
-  const allH = feedHealth(totalMissing, totalCount);
+  const totals = FEEDS.reduce((acc, f) => ({
+    count: acc.count + (f.count || 0),
+    missing_body: acc.missing_body + (f.missing_body || 0),
+    needs_translate: acc.needs_translate + (f.needs_translate || 0),
+    needs_summary: acc.needs_summary + (f.needs_summary || 0),
+  }), { count: 0, missing_body: 0, needs_translate: 0, needs_summary: 0 });
+  const allH = feedHealth(totals);
   allRow.title = allH.title;
   allRow.innerHTML =
     '<span class="feed-dot ' + allH.cls + '"></span>' +
     '<span class="feed-name">📦 全部</span>' +
-    '<span class="feed-count">' + totalCount + '</span>';
+    '<span class="feed-count">' + totals.count + '</span>';
   allRow.onclick = () => selectFeed(null, null);
   list.appendChild(allRow);
 
@@ -563,7 +633,7 @@ function renderFeedSidebar() {
       row.className = "feed-row";
       row.dataset.key = feedKey(f.source, f.feed_name);
       const name = f.source === "paper" ? "arxiv" : (f.feed_name || "(無 feed)");
-      const h = feedHealth(f.missing || 0, f.count || 0);
+      const h = feedHealth(f);
       row.title = h.title;
       row.innerHTML =
         '<span class="feed-dot ' + h.cls + '"></span>' +
@@ -618,14 +688,15 @@ function renderFeedView() {
     return;
   }
   content.innerHTML = groups.map((g, i) => dateGroupHtml(g, i === 0)).join("");
-  // 用 event delegation 接補摘要按鈕,避免把參數塞進 inline onclick
+  // event delegation:翻譯/摘要兩種 stage 鈕共用同一 handler,從 data-stage 區分
   content.onclick = (e) => {
-    const btn = e.target.closest(".retry-source-btn[data-retry-date]");
+    const btn = e.target.closest(".stage-btn[data-stage]");
     if (!btn) return;
     e.preventDefault();
     e.stopPropagation();
-    retrySummary(
-      btn.dataset.retryDate,
+    triggerStage(
+      btn.dataset.stage,
+      btn.dataset.date,
       currentFeedData.source,
       currentFeedData.feed_name,
     );
@@ -633,26 +704,27 @@ function renderFeedView() {
 }
 
 function dateGroupHtml(g, isFirst) {
-  // 摘要按鈕:在「特定 feed」(非全部)時永遠顯示,點下去強制重跑該日該 feed 全部摘要
-  // 有缺摘要才升級為黃色 chip(class has-missing),文字也帶數字;沒缺就低調灰色「↻ 重跑」
-  const showRetry = currentFeedData && currentFeedData.source !== null && g.events.length > 0;
-  let retryBtn = '';
-  if (showRetry) {
-    const hasMissing = g.missing > 0;
-    const cls = hasMissing ? 'retry-source-btn has-missing' : 'retry-source-btn';
-    const text = hasMissing
-      ? '⚡ 補 ' + g.missing + ' 篇'
-      : '↻ 重跑摘要';
-    retryBtn = '<button class="' + cls + '" data-retry-date="' + g.date + '" '
-      + 'title="' + (hasMissing ? '補完缺失的摘要' : '強制重跑當日所有摘要') + '">'
-      + text + '</button>';
-  }
+  // 統一資料流:每個 date-group 上兩個 stage 鈕。
+  //   翻譯(黃):body 有但 body_lang ≠ 'zh' 的數量(g.needs_translate)
+  //   摘要(藍):body_lang='zh' 但無 ai_summary 的數量(g.needs_summary)
+  // 都是 0 就 hidden;source=null(全部視圖)時也不顯示 — 避免一鍵翻整個資料庫
+  const scoped = currentFeedData && currentFeedData.source !== null && g.events.length > 0;
+  const nT = g.needs_translate || 0;
+  const nS = g.needs_summary || 0;
+  const btns = scoped
+    ? '<button class="stage-btn translate" data-stage="translate" data-date="' + g.date + '"'
+        + (nT > 0 ? '' : ' hidden')
+        + ' title="把 ' + nT + ' 篇英文 body 翻成中文">🌐 翻譯 ' + nT + '</button>'
+      + '<button class="stage-btn summarize" data-stage="summarize" data-date="' + g.date + '"'
+        + (nS > 0 ? '' : ' hidden')
+        + ' title="對 ' + nS + ' 篇中文 body 產生摘要">📝 摘要 ' + nS + '</button>'
+    : '';
   const cards = g.events.map(cardHtml).join("");
   return '<details class="date-group"' + (isFirst ? ' open' : '') + '>'
     + '<summary>'
     +   '<span class="date-text">📅 ' + g.date + '</span>'
     +   '<span class="date-count">' + g.events.length + ' 筆</span>'
-    +   retryBtn
+    +   btns
     + '</summary>'
     + '<div class="cards">' + cards + '</div>'
     + '</details>';
@@ -879,15 +951,18 @@ async function runToday() {
   }
 }
 
-async function retrySummary(date, source, feed_name) {
-  const params = new URLSearchParams({ date, source });
+async function triggerStage(stage, date, source, feed_name) {
+  // stage = "translate" | "summarize" — 對應 /api/translate-day | /api/summarize-day
+  const params = new URLSearchParams({ date });
+  if (source) params.set("source", source);
   if (feed_name !== null && feed_name !== undefined) params.set("feed_name", feed_name);
-  const label = source + (feed_name ? "/" + feed_name : "");
-  updateStatusBar({ running: true, date, mode: "retry:" + label });
+  const scope = (source || "all") + (feed_name ? "/" + feed_name : "");
+  updateStatusBar({ running: true, date, mode: stage + ":" + scope });
   try {
-    const res = await fetch("/api/retry-summary?" + params.toString(), { method: "POST" });
+    const res = await fetch("/api/" + stage + "-day?" + params.toString(),
+      { method: "POST" });
     const j = await res.json();
-    if (!res.ok) { updateStatusBar({ running: false, error: j.error || "補摘要失敗" }); return; }
+    if (!res.ok) { updateStatusBar({ running: false, error: j.error || (stage + " 失敗") }); return; }
     startPolling();
   } catch {
     updateStatusBar({ running: false, error: "無法連線" });
@@ -982,9 +1057,11 @@ function stopPolling() {
 function updateStatusBar(s) {
   const el = document.getElementById("pipeline-status");
   const panel = document.getElementById("pipeline-progress");
-  const btns = document.querySelectorAll(".retry-source-btn, .run-today-btn");
+  const btns = document.querySelectorAll(".stage-btn, .run-today-btn");
   if (s.running) {
-    const label = s.mode && s.mode.startsWith("retry:") ? `補摘要 ${s.mode.split(":")[1]}` : "蒐集中";
+    let label = "蒐集中";
+    if (s.mode && s.mode.startsWith("translate:")) label = `翻譯 ${s.mode.split(":")[1]}`;
+    else if (s.mode && s.mode.startsWith("summarize:")) label = `摘要 ${s.mode.split(":")[1]}`;
     el.className = "running"; el.textContent = `⚡ ${label} ${s.date || ""}`;
     btns.forEach(b => b.disabled = true);
     renderProgressPanel(s);
@@ -1248,10 +1325,25 @@ function cardHtml(e) {
   let origin = "";
   if (e.source === "paper") origin = esc((e.categories || []).slice(0, 2).join(", "));
   else origin = esc(e.feed_name || "");  // news / finance / youtube_* / podcast_* 都用 feed_name
-  const noSummary = !e.ai_summary;
   const isMedia = e.source && (e.source.startsWith("youtube_") || e.source.startsWith("podcast_"));
-  const needsStt = isMedia && !(e.body || "").trim();
-  const sttBtn = (needsStt && e.uid)
+  const hasBody = !!(e.body && e.body.trim());
+  const isZh = e.body_lang === "zh";
+  const hasSummary = !!(e.ai_summary && e.ai_summary.trim());
+  // 卡片狀態徽章 — 對應統一流程「卡在哪一段」:
+  //   無 body → 需 STT(媒體)/ 內文空
+  //   有 body 但非中文 → 需翻譯
+  //   中文 body 但無摘要 → 需摘要
+  let stageBadge = "";
+  if (!hasBody) {
+    stageBadge = isMedia
+      ? '<span class="badge stage-stt">🎙️ 需 STT</span>'
+      : '<span class="badge stage-empty">內文空</span>';
+  } else if (!isZh) {
+    stageBadge = '<span class="badge stage-translate">🌐 需翻譯</span>';
+  } else if (!hasSummary) {
+    stageBadge = '<span class="badge stage-summarize">📝 需摘要</span>';
+  }
+  const sttBtn = (isMedia && !hasBody && e.uid)
     ? `<button class="stt-btn" data-stt-uid="${esc(e.uid)}"
         onclick="triggerStt(this, '${esc(e.uid)}')">🎙️ 送 STT</button>`
     : "";
@@ -1272,7 +1364,7 @@ function cardHtml(e) {
     (e.impact_level === "Breaking" || e.impact_level === "High")
       ? `<span class="badge impact-${e.impact_level}">${e.impact_level}</span>` : "",
     e.score ? `<span>▲ ${e.score}</span>` : "",
-    noSummary ? `<span class="badge no-summary">摘要待重跑</span>` : "",
+    stageBadge,
   ].filter(Boolean).join("");
   const rightActions = [sttBtn, star].filter(Boolean).join("");
   const tags = (e.tags || []).length

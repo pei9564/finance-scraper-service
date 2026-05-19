@@ -295,7 +295,9 @@ async def post_transcribe_event(uid: str):
         if cur and cur.get("status") == "running":
             raise HTTPException(409, "此事件已在 STT 中")
         _transcribe_jobs[uid] = {"status": "running"}
-    asyncio.create_task(_run_transcribe(uid, event["url"], event["title"]))
+    asyncio.create_task(_run_transcribe(
+        uid, event["url"], event["title"], event.get("feed_name"),
+    ))
     return _no_cache_json({"uid": uid, "status": "running"})
 
 
@@ -306,19 +308,45 @@ async def get_transcribe_status(uid: str):
     return _no_cache_json(_transcribe_jobs.get(uid) or {"status": "idle"})
 
 
-@app.post("/api/retry-summary")
-async def post_retry_summary(date: str, source: str, feed_name: str | None = None):
-    if not date or not source:
-        raise HTTPException(400, "需要 date 與 source 參數")
+@app.post("/api/translate-day")
+async def post_translate_day(
+    date: str, source: str | None = None, feed_name: str | None = None,
+):
+    """把指定發佈日(TW)待翻譯的 events 翻成中文。source/feed_name 可選,
+    不傳就跑全部 source。背景執行,前端用 /api/status 輪詢進度。"""
+    if not date:
+        raise HTTPException(400, "需要 date 參數")
     async with _run_lock:
         if _run_state["running"]:
             raise HTTPException(409, "pipeline 正在執行中")
-        mode_label = f"retry:{source}" + (f"/{feed_name}" if feed_name else "")
-        _run_state.update(running=True, date=date, mode=mode_label, error=None)
-    asyncio.create_task(_run_retry(date, source, feed_name))
-    return _no_cache_json(
-        {"started": True, "date": date, "source": source, "feed_name": feed_name}
-    )
+        scope = source or "all"
+        if feed_name:
+            scope += f"/{feed_name}"
+        _run_state.update(running=True, date=date,
+                          mode=f"translate:{scope}", error=None)
+    asyncio.create_task(_run_translate_day(date, source, feed_name))
+    return _no_cache_json({"started": True, "date": date,
+                           "source": source, "feed_name": feed_name})
+
+
+@app.post("/api/summarize-day")
+async def post_summarize_day(
+    date: str, source: str | None = None, feed_name: str | None = None,
+):
+    """把指定發佈日已翻譯(body_lang='zh')但無 ai_summary 的 events 補摘要。"""
+    if not date:
+        raise HTTPException(400, "需要 date 參數")
+    async with _run_lock:
+        if _run_state["running"]:
+            raise HTTPException(409, "pipeline 正在執行中")
+        scope = source or "all"
+        if feed_name:
+            scope += f"/{feed_name}"
+        _run_state.update(running=True, date=date,
+                          mode=f"summarize:{scope}", error=None)
+    asyncio.create_task(_run_summarize_day(date, source, feed_name))
+    return _no_cache_json({"started": True, "date": date,
+                           "source": source, "feed_name": feed_name})
 
 
 @app.post("/api/run-monthly")
@@ -381,24 +409,56 @@ async def _spawn_pipeline(date: str | None) -> None:
         pipeline_progress.clear()
 
 
-async def _run_retry(date: str, source: str, feed_name: str | None = None) -> None:
-    from finance_scraper.retry import retry_summary
-    # progress 是 retry_summary 邊跑邊 mutate 的同一份 dict;塞進 _run_state["progress"]
-    # 後,/api/status 讀到的就是即時狀態
+async def _load_llm():
+    """每次手動 endpoint 跑時即時建 LLM client — 避免長連線握死、設定變更要重啟。"""
+    import yaml
+    from dotenv import load_dotenv
+    from finance_scraper.domain import AppConfig
+    from finance_scraper.infrastructure import LLMGatewayClient
+    load_dotenv()
+    with open(PROJECT_ROOT / "config" / "repos.yaml", encoding="utf-8") as f:
+        cfg = AppConfig(**yaml.safe_load(f))
+    return LLMGatewayClient(cfg.ai), cfg
+
+
+async def _run_translate_day(date: str, source: str | None, feed_name: str | None) -> None:
+    from finance_scraper.processing.by_day import translate_day
     progress: dict = {}
     async with _run_lock:
         _run_state["progress"] = progress
     try:
-        result = await retry_summary(date, source, feed_name, progress=progress)
-        label = source + (f"/{feed_name}" if feed_name else "")
+        llm, _cfg = await _load_llm()
+        result = await translate_day(date, source, feed_name, llm, progress=progress)
         err = (
-            f"補摘要 {label}：{result['failed']} 篇全部失敗(查 server log)"
+            f"翻譯失敗:{result['failed']}/{result['total']}(查 server log)"
             if result["failed"] > 0 and result["updated"] == 0
             else None
         )
         async with _run_lock:
             _run_state.update(running=False, error=err)
     except Exception as e:
+        logger.exception("translate-day 失敗")
+        async with _run_lock:
+            _run_state.update(running=False, error=str(e))
+
+
+async def _run_summarize_day(date: str, source: str | None, feed_name: str | None) -> None:
+    from finance_scraper.processing.by_day import summarize_day
+    progress: dict = {}
+    async with _run_lock:
+        _run_state["progress"] = progress
+    try:
+        llm, cfg = await _load_llm()
+        result = await summarize_day(date, source, feed_name, llm, cfg.ai, progress=progress)
+        err = (
+            f"摘要失敗:{result['failed']}/{result['total']}(查 server log)"
+            if result["failed"] > 0 and result["updated"] == 0
+            else None
+        )
+        async with _run_lock:
+            _run_state.update(running=False, error=err)
+    except Exception as e:
+        logger.exception("summarize-day 失敗")
         async with _run_lock:
             _run_state.update(running=False, error=str(e))
 
@@ -414,8 +474,12 @@ async def _run_monthly_task() -> None:
             _monthly_state.update(running=False, error=str(e))
 
 
-async def _run_transcribe(uid: str, url: str, title: str) -> None:
-    """背景跑 STT(在 thread 內阻塞輪詢),完成後寫回 events.body。"""
+async def _run_transcribe(uid: str, url: str, title: str, feed_name: str | None) -> None:
+    """背景跑 STT(在 thread 內阻塞輪詢),完成後寫回 events.body + body_lang。
+
+    body_lang 依 channel.lang 設定填:中文頻道 'zh' 直接跳翻譯步驟,
+    其他 'en' 走後續 translate-day 流程。
+    """
     from finance_scraper.infrastructure import STTClient
     try:
         stt = STTClient()  # base_url / language 都從 env(STT_BASE_URL / STT_LANGUAGE)
@@ -423,15 +487,35 @@ async def _run_transcribe(uid: str, url: str, title: str) -> None:
         if not text:
             _transcribe_jobs[uid] = {"status": "error", "error": "STT 無回應或失敗"}
             return
-        ok = await daily.update_event_body(uid, text)
+        body_lang = _resolve_channel_lang(feed_name) if feed_name else "en"
+        ok = await daily.update_event_body(uid, text, body_lang=body_lang)
         if not ok:
             _transcribe_jobs[uid] = {"status": "error", "error": "寫入 DB 失敗(uid 不存在?)"}
             return
         _transcribe_jobs[uid] = {"status": "done", "length": len(text)}
-        logger.info(f"手動 STT 完成 uid={uid} ({len(text)} 字)")
+        logger.info(f"手動 STT 完成 uid={uid} ({len(text)} 字, body_lang={body_lang})")
     except Exception as e:
         logger.exception("手動 STT 失敗")
         _transcribe_jobs[uid] = {"status": "error", "error": str(e)}
+
+
+def _resolve_channel_lang(feed_name: str) -> str:
+    """讀 repos.yaml 找對應 channel.lang;找不到預設 'en'。媒體 STT 用。"""
+    import yaml
+    from finance_scraper.domain import AppConfig
+    try:
+        with open(PROJECT_ROOT / "config" / "repos.yaml", encoding="utf-8") as f:
+            cfg = AppConfig(**yaml.safe_load(f))
+        for src_cfg in (
+            cfg.media.youtube_tech, cfg.media.youtube_fin,
+            cfg.media.podcast_tech, cfg.media.podcast_fin,
+        ):
+            for ch in src_cfg.channels:
+                if ch.name == feed_name:
+                    return ch.lang or "en"
+    except Exception as e:
+        logger.warning(f"讀 channel.lang 失敗,fallback en:{e}")
+    return "en"
 
 
 async def _run_releases_task(lookback: int) -> None:

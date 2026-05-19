@@ -74,6 +74,7 @@ class NewsCollector:
                 url=url,
                 created_at=created,
                 body=None,
+                body_lang=None,  # body 空,等 fetch_body 補爬後再判斷;HN 都是英文網站
                 feed_name="HackerNews",
                 score=score,
                 author=hit.get("author"),
@@ -114,6 +115,7 @@ class NewsCollector:
                 url=url,
                 created_at=published or datetime.now(timezone.utc),
                 body=summary,
+                body_lang=feed_cfg.lang if summary else None,
                 feed_name=feed_cfg.name,
                 score=0,
                 author=entry.get("author"),

@@ -50,6 +50,17 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS events_date_idx ON events(date);
 CREATE INDEX IF NOT EXISTS events_source_idx ON events(source);
 
+-- 新欄位 body_lang ('zh'/'en'/null) — 標記 body 語言。
+-- 統一資料流(蒐集→STT→翻譯→摘要)用,translate-day 看這欄決定該不該翻。
+-- 既有資料 body_lang=null,視為「未翻譯」;已知中文 feed backfill 為 'zh'
+-- 以免重複送翻譯。新增 zh feed 需手動 UPDATE 或讓 LLM 跑一次再回 zh。
+ALTER TABLE events ADD COLUMN IF NOT EXISTS body_lang TEXT;
+UPDATE events SET body_lang = 'zh'
+WHERE body_lang IS NULL AND feed_name IN (
+  '經濟日報 國際', '經濟日報 焦點',
+  '老王愛說笑', '游庭皓的財經皓角', '清流君', '財女珍妮'
+);
+
 CREATE TABLE IF NOT EXISTS trending_runs (
   month         TEXT PRIMARY KEY,
   generated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),

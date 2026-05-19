@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_article_text(url: str, timeout: float = 15.0, min_length: int = 100) -> str | None:
-    """從 URL 抓取文章內文;失敗或內容過短回傳 None。retry.py 與 step 共用。"""
+    """從 URL 抓取文章內文;失敗或內容過短回傳 None。"""
     try:
         import httpx
         import trafilatura
@@ -42,4 +42,9 @@ class FetchBodyStep:
             return event
 
         logger.info(f"fetch_body 成功({len(text)} 字):{event.url}")
-        return event.model_copy(update={"body": text})
+        # body_lang 沿用既有值;若還是 null(HN 沒帶 lang)預設 'en',
+        # 後續走 translate-day 才會被處理
+        updates: dict = {"body": text}
+        if not event.body_lang:
+            updates["body_lang"] = "en"
+        return event.model_copy(update=updates)

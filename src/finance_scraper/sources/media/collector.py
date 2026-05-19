@@ -105,7 +105,8 @@ class MediaCollector:
                 title=title,
                 url=url,
                 created_at=published,
-                body="",  # STT 改由 UI 手動觸發,寫進 events.body
+                body="",            # STT 改由 UI 手動觸發,寫進 events.body
+                body_lang=None,     # body 空,等 STT 完成 server 端依 channel.lang 填
                 feed_name=channel.name,
                 score=0,
             ))

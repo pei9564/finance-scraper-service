@@ -121,17 +121,28 @@ class Pipeline:
     # ------------------------------------------------------------------
 
     def _process_per_source(self, classified: list[ClassifiedEvent]) -> list[SummarizedEvent]:
+        """逐來源處理鏈 — 統一資料流重構後只剩 fetch_body 一支(news 補爬內文)。
+        translate/summarize 已從自動 step 移出,改由 /api/translate-day、/api/summarize-day
+        手動觸發。cache 命中標準也擴充:既有 body_lang='zh' 或已摘要,就跳過 fetch_body
+        並保留 DB 內的翻譯/摘要(不被 RSS 短文蓋掉)。
+        """
         result: list[SummarizedEvent] = []
         cache_hits = 0
         for i, event in enumerate(classified, 1):
             cached = self.processed_cache.get((event.source_type.value, event.url))
-            if cached and (cached.get("ai_summary") or "").strip():
-                # 命中已摘要過的事件 — 直接套 cached 欄位,跳過所有 steps(translate/fetch_body/summarize)
-                updates: dict[str, Any] = {"ai_summary": cached["ai_summary"]}
+            is_translated = bool(cached and cached.get("body_lang") == "zh")
+            has_summary = bool(cached and (cached.get("ai_summary") or "").strip())
+            if cached and (is_translated or has_summary):
+                # 命中既有翻譯或摘要 — 直接套用 DB 欄位,跳過 fetch_body
+                updates: dict[str, Any] = {}
+                if has_summary:
+                    updates["ai_summary"] = cached["ai_summary"]
                 if cached.get("title"):
                     updates["title"] = cached["title"]
                 if cached.get("body"):
                     updates["body"] = cached["body"]
+                if cached.get("body_lang"):
+                    updates["body_lang"] = cached["body_lang"]
                 summarized: ClassifiedEvent = SummarizedEvent(**event.model_dump()).model_copy(update=updates)
                 cache_hits += 1
             else:
@@ -147,9 +158,9 @@ class Pipeline:
             )
             _progress.update({"processed": i})
         if cache_hits:
-            logger.info(f"Stage 4 完成：逐來源處理鏈執行完畢（cache 命中 {cache_hits}/{len(classified)},跳過 LLM）")
+            logger.info(f"Stage 4 完成:fetch_body 執行完畢(cache 命中 {cache_hits}/{len(classified)},跳過)")
         else:
-            logger.info("Stage 4 完成：逐來源處理鏈執行完畢")
+            logger.info("Stage 4 完成:fetch_body 執行完畢")
         return result
 
     # ------------------------------------------------------------------

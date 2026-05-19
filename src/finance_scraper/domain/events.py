@@ -21,6 +21,9 @@ class RawEvent(BaseModel):
     url: str
     created_at: datetime
     body: Optional[str] = None
+    # body 的語言:'zh' / 'en' / ... / None=未知。translate-day 用此判斷該不該翻;
+    # collector 蒐集時依 feed 設定填,媒體類蒐集後 body 為空、body_lang 也為 None
+    body_lang: Optional[str] = None
 
 
 class RawNewsEvent(RawEvent):

@@ -38,6 +38,8 @@ def _row_to_event_dict(r) -> dict[str, Any]:
         "impact_level": r["impact_level"],
         "ai_summary": r["ai_summary"],
         "body": r["body"],
+        # asyncpg Record 取不存在欄位會 KeyError;舊查詢沒選 body_lang 時用 None 兜
+        "body_lang": _safe_get(r, "body_lang"),
         "tags": list(r["tags"] or []),
         "migration_steps": list(r["migration_steps"] or []),
         "feed_name": r["feed_name"],
@@ -46,6 +48,19 @@ def _row_to_event_dict(r) -> dict[str, Any]:
         "categories": list(r["categories"] or []),
         "arxiv_id": r["arxiv_id"],
     }
+
+
+def _safe_get(r, key, default=None):
+    try:
+        return r[key]
+    except (KeyError, IndexError):
+        return default
+
+
+# 所有 events SELECT 共用同一份欄位清單,免得新增欄位要四處改
+_EVENT_COLS = """uid, source, repo, event_type, classification, title, url,
+                 created_at, impact_level, ai_summary, body, body_lang, tags,
+                 migration_steps, feed_name, score, authors, categories, arxiv_id"""
 
 
 async def upsert_run(day_str: str, daily_summary: str, events: list[dict[str, Any]]) -> None:
@@ -85,6 +100,7 @@ async def upsert_run(day_str: str, daily_summary: str, events: list[dict[str, An
                     e.get("impact_level"),
                     e.get("ai_summary"),
                     e.get("body"),
+                    e.get("body_lang"),
                     list(e.get("tags") or []),
                     list(e.get("migration_steps") or []),
                     e.get("feed_name"),
@@ -96,27 +112,33 @@ async def upsert_run(day_str: str, daily_summary: str, events: list[dict[str, An
             # uid 是全域 PK,而上面只 DELETE 同日;同一篇跨日重複出現
             # (RSS 重發、YouTube lookback、arXiv 跨日重映)時會撞舊資料,
             # 故走 upsert 以最新 run 的內容為準。
+            # 但「翻譯/摘要」的成果不能被重蒐集蓋掉 — title/body/body_lang/ai_summary
+            # 用 COALESCE 保留 DB 內非空值(舊資料是「中文/已摘要」就尊重它,
+            # 新資料只有在 DB 原本是空/null 時才填入)。
             await conn.executemany(
                 """INSERT INTO events (
                     uid, date, position, source, repo, event_type, classification,
-                    title, url, created_at, impact_level, ai_summary, body,
+                    title, url, created_at, impact_level, ai_summary, body, body_lang,
                     tags, migration_steps, feed_name, score, authors, categories,
                     arxiv_id
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
-                          $14,$15,$16,$17,$18,$19,$20)
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
+                          $15,$16,$17,$18,$19,$20,$21)
                    ON CONFLICT (uid) DO UPDATE SET
                      date            = EXCLUDED.date,
                      position        = EXCLUDED.position,
                      source          = EXCLUDED.source,
                      repo            = EXCLUDED.repo,
                      event_type      = EXCLUDED.event_type,
-                     classification  = EXCLUDED.classification,
-                     title           = EXCLUDED.title,
+                     classification  = COALESCE(events.classification, EXCLUDED.classification),
+                     title           = CASE WHEN events.body_lang = 'zh' THEN events.title
+                                            ELSE EXCLUDED.title END,
                      url             = EXCLUDED.url,
                      created_at      = EXCLUDED.created_at,
-                     impact_level    = EXCLUDED.impact_level,
-                     ai_summary      = EXCLUDED.ai_summary,
-                     body            = EXCLUDED.body,
+                     impact_level    = COALESCE(events.impact_level, EXCLUDED.impact_level),
+                     ai_summary      = COALESCE(NULLIF(events.ai_summary, ''), EXCLUDED.ai_summary),
+                     body            = CASE WHEN events.body_lang = 'zh' THEN events.body
+                                            ELSE COALESCE(NULLIF(events.body, ''), EXCLUDED.body) END,
+                     body_lang       = COALESCE(events.body_lang, EXCLUDED.body_lang),
                      tags            = EXCLUDED.tags,
                      migration_steps = EXCLUDED.migration_steps,
                      feed_name       = EXCLUDED.feed_name,
@@ -145,9 +167,7 @@ async def load_run(day_str: str) -> dict[str, Any] | None:
         if head is None:
             return None
         rows = await conn.fetch(
-            """SELECT uid, source, repo, event_type, classification, title, url,
-                      created_at, impact_level, ai_summary, body, tags, migration_steps,
-                      feed_name, score, authors, categories, arxiv_id
+            f"""SELECT {_EVENT_COLS}
                FROM events
                WHERE date = $1
                ORDER BY position""",
@@ -168,15 +188,19 @@ async def load_processed_events() -> dict[tuple[str, str], dict[str, Any]]:
     """
     pool = await get_pool()
     async with pool.acquire() as conn:
+        # 翻譯(body_lang='zh')或摘要(ai_summary)只要有任一就值得 cache —
+        # 重蒐集時不想被 RSS 短摘要蓋掉
         rows = await conn.fetch(
-            """SELECT source, url, title, body, ai_summary
+            """SELECT source, url, title, body, body_lang, ai_summary
                FROM events
-               WHERE ai_summary IS NOT NULL AND ai_summary <> ''"""
+               WHERE (ai_summary IS NOT NULL AND ai_summary <> '')
+                  OR body_lang = 'zh'"""
         )
     return {
         (r["source"], r["url"]): {
             "title": r["title"],
             "body": r["body"],
+            "body_lang": r["body_lang"],
             "ai_summary": r["ai_summary"],
         }
         for r in rows
@@ -227,7 +251,13 @@ async def list_feeds() -> list[dict[str, Any]]:
 
     特殊處理:paper 的 feed_name 為空,整類聚合成一筆(feed_name=None)。
     舊版殘留的 source='github' 不列出。
-    回傳每筆含 source / feed_name / count / missing / last_date(最近事件的發佈日)。
+    回傳每筆含 source / feed_name / count / 三段卡關計數 / last_date(最近事件的發佈日)。
+
+    三段卡關:統一資料流(蒐集→STT→翻譯→摘要)各階段「卡住未完成」的數量
+      - missing_body:   media 類 body 為空(等手動 STT)
+      - needs_translate: body 有但 body_lang ≠ 'zh'(等翻譯)
+      - needs_summary:   body_lang = 'zh' 但 ai_summary 為空(等摘要)
+    sidebar 健康度 dot 依「最多卡哪一段」上色。
     """
     pool = await get_pool()
     async with pool.acquire() as conn:
@@ -236,7 +266,15 @@ async def list_feeds() -> list[dict[str, Any]]:
                       CASE WHEN source = 'paper' THEN NULL
                            ELSE NULLIF(feed_name, '') END AS feed_name,
                       COUNT(*) AS n,
-                      COUNT(*) FILTER (WHERE ai_summary IS NULL OR ai_summary = '') AS missing,
+                      COUNT(*) FILTER (WHERE body IS NULL OR body = '') AS missing_body,
+                      COUNT(*) FILTER (
+                        WHERE body IS NOT NULL AND body <> ''
+                          AND (body_lang IS NULL OR body_lang <> 'zh')
+                      ) AS needs_translate,
+                      COUNT(*) FILTER (
+                        WHERE body_lang = 'zh'
+                          AND (ai_summary IS NULL OR ai_summary = '')
+                      ) AS needs_summary,
                       MAX({_PUB_DATE_EXPR}) AS last_date
                FROM events
                WHERE source != 'github'
@@ -250,7 +288,11 @@ async def list_feeds() -> list[dict[str, Any]]:
             "source": r["source"],
             "feed_name": r["feed_name"],
             "count": r["n"],
-            "missing": r["missing"],
+            "missing_body": r["missing_body"],
+            "needs_translate": r["needs_translate"],
+            "needs_summary": r["needs_summary"],
+            # 向後相容:UI 舊版仍讀 missing 欄,等同「總缺(STT+翻譯+摘要)」
+            "missing": r["missing_body"] + r["needs_translate"] + r["needs_summary"],
             "last_date": r["last_date"].strftime("%Y-%m-%d") if r["last_date"] else None,
         }
         for r in rows
@@ -297,9 +339,7 @@ async def load_feed_events(
                   WHERE {where_clause}
                   ORDER BY pub_date DESC LIMIT {limit_param}
                 )
-                SELECT uid, source, repo, event_type, classification, title, url,
-                       created_at, impact_level, ai_summary, body, tags, migration_steps,
-                       feed_name, score, authors, categories, arxiv_id,
+                SELECT {_EVENT_COLS},
                        {_PUB_DATE_EXPR} AS pub_date
                 FROM events
                 WHERE {where_clause}
@@ -310,18 +350,36 @@ async def load_feed_events(
     groups: dict[str, dict[str, Any]] = {}
     for r in rows:
         d = r["pub_date"].strftime("%Y-%m-%d")
-        g = groups.setdefault(d, {"date": d, "events": [], "missing": 0})
+        g = groups.setdefault(d, {
+            "date": d, "events": [],
+            "missing": 0,           # 向後相容(總缺)
+            "missing_body": 0,
+            "needs_translate": 0,
+            "needs_summary": 0,
+        })
         ev = _row_to_event_dict(r)
         g["events"].append(ev)
-        if not (ev["ai_summary"] or "").strip():
-            g["missing"] += 1
+        body_present = bool((ev["body"] or "").strip())
+        is_zh = (ev["body_lang"] == "zh")
+        has_summary = bool((ev["ai_summary"] or "").strip())
+        if not body_present:
+            g["missing_body"] += 1
+        elif not is_zh:
+            g["needs_translate"] += 1
+        elif not has_summary:
+            g["needs_summary"] += 1
+        # missing 仍代表「離摘要還差幾步」總和
+        g["missing"] = g["missing_body"] + g["needs_translate"] + g["needs_summary"]
     return list(groups.values())
 
 
 async def list_events_by_pub_date(
-    pub_date: str, source: str, feed_name: str | None = None,
+    pub_date: str, source: str | None = None, feed_name: str | None = None,
 ) -> list[dict[str, Any]]:
-    """讀取指定發佈日(TW)+ source(+ feed_name)的所有事件 — retry 用。"""
+    """讀取指定發佈日(TW)的所有事件,可選擇用 source/feed_name 篩。
+
+    source=None 表整日(translate-day / summarize-day 不指定 source 時用)。
+    """
     where_clause, params = _feed_where(source, feed_name)
     params.append(_parse_date(pub_date))
     date_param = f"${len(params)}"
@@ -329,9 +387,7 @@ async def list_events_by_pub_date(
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            f"""SELECT uid, source, repo, event_type, classification, title, url,
-                       created_at, impact_level, ai_summary, body, tags, migration_steps,
-                       feed_name, score, authors, categories, arxiv_id
+            f"""SELECT {_EVENT_COLS}
                 FROM events
                 WHERE {where_clause}
                   AND {_PUB_DATE_EXPR} = {date_param}
@@ -339,6 +395,40 @@ async def list_events_by_pub_date(
             *params,
         )
     return [_row_to_event_dict(r) for r in rows]
+
+
+async def list_events_needing_translation(
+    pub_date: str, source: str | None = None, feed_name: str | None = None,
+) -> list[dict[str, Any]]:
+    """待翻譯:body 非空 AND body_lang ≠ 'zh'(含 null)。"""
+    rows = await list_events_by_pub_date(pub_date, source, feed_name)
+    return [
+        r for r in rows
+        if (r.get("body") or "").strip() and r.get("body_lang") != "zh"
+    ]
+
+
+async def list_events_needing_summary(
+    pub_date: str, source: str | None = None, feed_name: str | None = None,
+) -> list[dict[str, Any]]:
+    """待摘要:body_lang = 'zh' AND ai_summary 為空。"""
+    rows = await list_events_by_pub_date(pub_date, source, feed_name)
+    return [
+        r for r in rows
+        if r.get("body_lang") == "zh" and not (r.get("ai_summary") or "").strip()
+    ]
+
+
+async def update_event_translation(uid: str, title: str, body: str) -> bool:
+    """translate-day 寫回:覆蓋 title + body,並把 body_lang 標 'zh'。"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """UPDATE events SET title = $1, body = $2, body_lang = 'zh'
+               WHERE uid = $3""",
+            title, body, uid,
+        )
+    return result.endswith(" 1")
 
 
 async def update_event_summary(uid: str, ai_summary: str, body: str | None) -> bool:
@@ -363,20 +453,27 @@ async def get_event_by_uid(uid: str) -> dict[str, Any] | None:
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            """SELECT uid, source, repo, event_type, classification, title, url,
-                      created_at, impact_level, ai_summary, body, tags, migration_steps,
-                      feed_name, score, authors, categories, arxiv_id
-               FROM events WHERE uid = $1""",
+            f"""SELECT {_EVENT_COLS} FROM events WHERE uid = $1""",
             uid,
         )
     return _row_to_event_dict(row) if row else None
 
 
-async def update_event_body(uid: str, body: str) -> bool:
-    """手動 STT 完成後寫回 body — 不動 ai_summary,後續走「補摘要」按鈕。"""
+async def update_event_body(uid: str, body: str, body_lang: str | None = None) -> bool:
+    """手動 STT 完成後寫回 body — 不動 ai_summary,後續走「翻譯/摘要」按鈕。
+
+    body_lang 由 caller 依 channel config 傳:中文頻道直接設 'zh'、其他設 'en'。
+    None 維持 DB 原值(向後相容);明確傳值才更新。
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
-        result = await conn.execute(
-            "UPDATE events SET body = $1 WHERE uid = $2", body, uid,
-        )
+        if body_lang is None:
+            result = await conn.execute(
+                "UPDATE events SET body = $1 WHERE uid = $2", body, uid,
+            )
+        else:
+            result = await conn.execute(
+                "UPDATE events SET body = $1, body_lang = $2 WHERE uid = $3",
+                body, body_lang, uid,
+            )
     return result.endswith(" 1")
