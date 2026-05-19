@@ -448,6 +448,14 @@ async def update_event_summary(uid: str, ai_summary: str, body: str | None) -> b
     return result.endswith(" 1")
 
 
+async def delete_event(uid: str) -> bool:
+    """單筆刪除 — UI 上點 🗑 用。bookmarks 表獨立(已快取所需欄位),不受影響。"""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute("DELETE FROM events WHERE uid = $1", uid)
+    return result.endswith(" 1")
+
+
 async def get_event_by_uid(uid: str) -> dict[str, Any] | None:
     """單一事件查詢 — 給 /api/transcribe-event 確認 url/title/source 與 body 狀態。"""
     pool = await get_pool()

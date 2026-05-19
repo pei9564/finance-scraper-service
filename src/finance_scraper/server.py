@@ -16,7 +16,7 @@ import os
 import re
 import sys
 from contextlib import asynccontextmanager
-from datetime import date as date_t
+from datetime import date as date_t, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -64,6 +64,10 @@ _transcribe_lock = asyncio.Lock()
 
 
 # ── lifespan / app ──────────────────────────────────────────────────────────
+_AUTO_PRUNE_HOURS = 6  # 每 N 小時跑一次保留期限清理
+_DEFAULT_RETENTION_DAYS = 5  # 預設保留最近 N 天的事件,可由 RETENTION_DAYS env 覆蓋
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.basicConfig(
@@ -73,8 +77,37 @@ async def lifespan(app: FastAPI):
     )
     await init_schema()
     logger.info("Finance Scraper server 啟動")
-    yield
-    await close_pool()
+    cleanup_task = asyncio.create_task(_auto_prune_loop())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
+        await close_pool()
+
+
+async def _auto_prune_loop() -> None:
+    """背景任務:每 _AUTO_PRUNE_HOURS 小時清理一次超過 RETENTION_DAYS 的舊資料。
+
+    啟動後 30 秒先跑一次(讓 init_schema 完成),之後固定間隔。
+    刪除走 daily_runs.date 為 cutoff(CASCADE 連 events 一起)。
+    """
+    await asyncio.sleep(30)
+    while True:
+        try:
+            days = int(os.environ.get("RETENTION_DAYS", _DEFAULT_RETENTION_DAYS))
+            cutoff = date_t.today() - timedelta(days=days)
+            deleted = await daily.prune_before(cutoff)
+            if deleted > 0:
+                logger.info(f"auto-prune:刪除 {deleted} 個 daily_runs(早於 {cutoff})")
+            else:
+                logger.debug(f"auto-prune:無事可刪(cutoff {cutoff})")
+        except Exception as e:
+            logger.exception(f"auto-prune 失敗:{e}")
+        await asyncio.sleep(_AUTO_PRUNE_HOURS * 3600)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -220,6 +253,17 @@ async def delete_bookmark(uid: str):
     ok = await bookmarks.remove(uid)
     if not ok:
         raise HTTPException(404, "找不到 uid")
+    return _no_cache_json({"deleted": True})
+
+
+@app.delete("/api/events/{uid}")
+async def delete_event(uid: str):
+    """單筆事件刪除 — UI 卡片 🗑 鈕用。bookmarks 表獨立,不影響收藏。"""
+    if not uid:
+        raise HTTPException(400, "缺少 uid")
+    ok = await daily.delete_event(uid)
+    if not ok:
+        raise HTTPException(404, "找不到事件")
     return _no_cache_json({"deleted": True})
 
 

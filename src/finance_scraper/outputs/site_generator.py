@@ -242,6 +242,12 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .bookmark-btn:hover { color: #e3b341; }
   .bookmark-btn.on { color: #e3b341; }
   .bookmark-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* 卡片刪除鈕 — 放在 source badge 旁,平常低調(灰半透明),hover 才轉紅警示 */
+  .card-delete-btn { background: transparent; border: none; cursor: pointer;
+    font-size: 12px; color: #6e7681; padding: 0 4px; line-height: 1;
+    font-family: inherit; opacity: 0.45; }
+  .card-delete-btn:hover { color: #f85149; opacity: 1; }
+  .card-delete-btn:disabled { opacity: 0.25; cursor: not-allowed; }
 
   /* ── collection header ── */
   #collection-header { display: flex; align-items: center; justify-content: space-between;
@@ -1356,9 +1362,15 @@ function cardHtml(e) {
   // classification 與 source 同名(e.g. finance/Finance)時不重複顯示
   const showClass = e.classification &&
     e.classification.toLowerCase() !== (e.source || "").toLowerCase();
+  // 刪除鈕貼在 source badge 旁(使用者要求),平常半透明 hover 才現紅
+  const deleteBtn = e.uid
+    ? `<button class="card-delete-btn" data-uid="${esc(e.uid)}"
+        title="刪除這筆" onclick="deleteEvent(this, '${esc(e.uid)}')">🗑</button>`
+    : "";
   // 日期由 date-group header 提供,卡片內不再重複顯示
   const leftMeta = [
     `<span class="badge src-${e.source}">${e.source}</span>`,
+    deleteBtn,
     origin ? `<span>${origin}</span>` : "",
     showClass ? `<span class="badge">${esc(e.classification)}</span>` : "",
     (e.impact_level === "Breaking" || e.impact_level === "High")
@@ -1380,6 +1392,27 @@ function cardHtml(e) {
     <div class="card-title"><a href="${esc(e.url)}" target="_blank">${esc(e.title)}</a></div>
     ${summary}${tags}
   </div>`;
+}
+
+async function deleteEvent(btn, uid) {
+  if (!confirm("確定要刪除這筆?(只刪 DB 內事件,收藏不受影響)")) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/events/" + encodeURIComponent(uid),
+      { method: "DELETE" });
+    if (!res.ok) { btn.disabled = false; alert("刪除失敗"); return; }
+    // 移除整張卡 + 從 currentFeedData 拿掉,避免下次 render 又出現
+    const card = btn.closest(".card");
+    if (card) card.remove();
+    if (currentFeedData && currentFeedData.groups) {
+      currentFeedData.groups.forEach(g => {
+        g.events = (g.events || []).filter(ev => ev.uid !== uid);
+      });
+    }
+  } catch {
+    btn.disabled = false;
+    alert("無法連線");
+  }
 }
 
 async function toggleBookmark(btn, uid) {
