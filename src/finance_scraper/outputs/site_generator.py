@@ -46,7 +46,8 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   #sidebar-scroll { flex: 1; overflow-y: auto; padding: 16px 0 8px; }
   #sidebar-footer { padding: 10px 16px; border-top: 1px solid #30363d;
     background: #161b22; }
-  #sidebar h1 { font-size: 15px; padding: 0 16px 10px; color: #f0f6fc; }
+  #sidebar h1 { font-size: 17px; font-weight: 700; padding: 4px 16px 12px;
+    color: #f0f6fc; letter-spacing: 0.2px; }
 
   .llm-test-btn { width: 100%; font-size: 12px; padding: 6px 0; background: transparent;
     border: 1px solid #30363d; border-radius: 5px; color: #8b949e; cursor: pointer; }
@@ -95,12 +96,16 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     font-family: inherit; }
   .feed-source-info:hover { color: #8b949e; }
   .info-popover { position: fixed; background: #161b22; border: 1px solid #30363d;
-    border-radius: 6px; padding: 10px 12px; max-width: 300px; z-index: 1000;
-    font-size: 12px; color: #c9d1d9; line-height: 1.55; box-shadow: 0 4px 12px #0008;
+    border-radius: 6px; padding: 10px 28px 10px 12px; max-width: 320px; z-index: 1000;
+    font-size: 12px; color: #c9d1d9; line-height: 1.6; box-shadow: 0 4px 12px #0008;
     text-transform: none; letter-spacing: normal; }
   .info-popover strong { color: #58a6ff; }
   .info-popover code { background: #30363d; padding: 0 4px; border-radius: 3px;
     font-size: 11px; }
+  .info-popover .info-close { position: absolute; top: 4px; right: 6px;
+    background: transparent; border: none; color: #6e7681; cursor: pointer;
+    font-size: 14px; line-height: 1; padding: 4px 6px; font-family: inherit; }
+  .info-popover .info-close:hover { color: #f0f6fc; }
   .feed-row { padding: 6px 16px; cursor: pointer; font-size: 13px;
     display: flex; align-items: center; gap: 6px; }
   .feed-row:hover { background: #21262d; }
@@ -108,7 +113,13 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .feed-row.active .feed-count { color: #ffffffaa; }
   .feed-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .feed-count { font-size: 11px; color: #8b949e; flex-shrink: 0; }
-  .feed-missing { font-size: 10px; color: #e3b341; flex-shrink: 0; }
+  /* 健康度小圓點:綠=全部已摘要,黃=部分缺,紅=多數/全缺。title 帶實際數字 */
+  .feed-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+    display: inline-block; }
+  .feed-dot.ok { background: #3fb95066; }
+  .feed-dot.warn { background: #e3b341; }
+  .feed-dot.bad { background: #f85149; }
+  .feed-row.active .feed-dot.ok { background: #ffffff66; }
 
   .run-today-btn { width: 100%; font-size: 12px; padding: 6px 0; background: transparent;
     border: 1px solid #1f6feb88; border-radius: 5px; color: #58a6ff; cursor: pointer; }
@@ -126,10 +137,13 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     color: #6e7681; text-transform: uppercase; letter-spacing: 0.5px; }
 
   /* ── main ── */
-  #main { flex: 1; padding: 24px 32px; max-width: 900px; }
-  #feed-header { margin-bottom: 16px; }
-  #feed-header h2 { font-size: 18px; color: #f0f6fc; }
-  #feed-header .sub { font-size: 12px; color: #8b949e; margin-top: 4px; }
+  /* margin:auto 讓主區在寬螢幕(>1110px)置中,避免右側大片空白 */
+  #main { flex: 1; padding: 24px 32px; max-width: 900px; margin: 0 auto; }
+  #feed-header { margin-bottom: 18px; }
+  #feed-header h2 { font-size: 22px; font-weight: 700; color: #f0f6fc;
+    line-height: 1.3; }
+  #feed-header .sub { font-size: 12px; color: #8b949e; margin-top: 6px; }
+  #feed-header .sub strong { color: #c9d1d9; font-weight: 600; }
 
   .date-group { margin-bottom: 16px; border: 1px solid #30363d; border-radius: 8px;
     background: #161b22; overflow: hidden; }
@@ -150,18 +164,29 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .stt-btn:hover:not(:disabled) { background: #d2992218; }
   .stt-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
+  /* 預設低存在感(borderless 灰):大多時候在「沒缺」情況下用來強制重跑。
+     has-missing 時升級為黃色 chip 吸引注意 — 視覺重點放在「需要關注的」 */
   .retry-source-btn { font-size: 11px; padding: 3px 10px; background: transparent;
-    border: 1px solid #e3b34155; border-radius: 5px; color: #e3b341; cursor: pointer;
-    white-space: nowrap; flex-shrink: 0; }
-  .retry-source-btn:hover:not(:disabled) { background: #e3b34118; }
+    border: 1px solid transparent; border-radius: 5px; color: #6e7681; cursor: pointer;
+    white-space: nowrap; flex-shrink: 0; font-family: inherit; }
+  .retry-source-btn:hover:not(:disabled) { color: #c9d1d9; background: #21262d; }
+  .retry-source-btn.has-missing { border-color: #e3b34155; color: #e3b341; }
+  .retry-source-btn.has-missing:hover:not(:disabled) { background: #e3b34118; color: #e3b341; }
   .retry-source-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .date-group .cards { padding: 0 14px 14px; }
 
   /* ── cards ── */
   .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
-          padding: 14px 16px; margin-bottom: 12px; }
-  .card-meta { font-size: 12px; color: #8b949e; margin-bottom: 6px;
-               display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+          padding: 12px 14px; margin-bottom: 10px; }
+  /* meta 分兩區：左 = 身份(來源/feed/分類/狀態)，右 = 動作(STT/收藏)
+     避免動作鈕跟識別資訊混在同一視覺層級 */
+  .card-meta { font-size: 12px; color: #8b949e; margin-bottom: 8px;
+               display: flex; gap: 8px; align-items: center; }
+  .card-meta-left { display: flex; flex-wrap: wrap; gap: 6px;
+    align-items: center; flex: 1; min-width: 0; }
+  .card-meta-actions { display: flex; gap: 6px; align-items: center;
+    flex-shrink: 0; margin-left: auto; }
+  .card-meta-actions .bookmark-btn { margin-left: 0; }
   .badge { background: #21262d; border-radius: 4px; padding: 2px 8px; font-size: 11px; }
   .badge.src-news { background: #d2992233; color: #e3b341; }
   .badge.src-paper { background: #3fb95033; color: #56d364; }
@@ -176,6 +201,16 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .card-body-preview { color: #8b949e; }
   .card-tags { margin-top: 8px; font-size: 12px; color: #8b949e; }
   .empty { color: #8b949e; padding: 40px 0; text-align: center; }
+  /* 空狀態升級版:大圖示 + 主標 + 副標 + 可選 CTA */
+  .empty-rich { text-align: center; padding: 60px 20px; color: #8b949e; }
+  .empty-rich .empty-icon { font-size: 48px; margin-bottom: 14px; opacity: 0.6; }
+  .empty-rich .empty-title { font-size: 16px; color: #c9d1d9; margin-bottom: 6px;
+    font-weight: 600; }
+  .empty-rich .empty-sub { font-size: 13px; margin-bottom: 20px; line-height: 1.6; }
+  .empty-cta-btn { font-size: 13px; padding: 8px 18px; background: transparent;
+    border: 1px solid #1f6feb88; border-radius: 5px; color: #58a6ff;
+    cursor: pointer; font-family: inherit; }
+  .empty-cta-btn:hover { background: #1f6feb18; }
 
   .bookmark-btn { background: transparent; border: none; cursor: pointer;
     font-size: 14px; color: #6e7681; padding: 0 4px; line-height: 1;
@@ -189,9 +224,13 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
                        margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
   #collection-header h2 { font-size: 16px; color: #f0f6fc; }
   .collection-action-btn { font-size: 12px; padding: 5px 12px; background: transparent;
-    border: 1px solid #6e40c955; border-radius: 5px; color: #bc8cff; cursor: pointer; }
-  .collection-action-btn:hover:not(:disabled) { background: #6e40c918; }
+    border: 1px solid #1f6feb88; border-radius: 5px; color: #58a6ff; cursor: pointer; }
+  .collection-action-btn:hover:not(:disabled) { background: #1f6feb18; }
   .collection-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* days 下拉是被動選擇器、不是動作，改成中性灰避免跟「更新」鈕視覺競爭 */
+  select.collection-action-btn { background: #161b22; border-color: #30363d;
+    color: #c9d1d9; }
+  select.collection-action-btn:hover { border-color: #8b949e; background: transparent; }
   #collection-status { font-size: 12px; color: #8b949e; margin-bottom: 12px; min-height: 18px; }
   #collection-status.running { color: #e3b341; }
   #collection-status.error { color: #f85149; }
@@ -208,10 +247,50 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .release-group[open] > summary::before { transform: rotate(90deg); }
   .release-group > summary a { color: #f0f6fc; }
   .release-count { font-size: 12px; color: #8b949e; font-weight: 400; }
-  select.collection-action-btn { background: #161b22; }
+
+  /* ── responsive ──────────────────────────────────────────────────────
+     ≤900px: sidebar 變抽屜(預設收起)+ 主區全寬 + 頂部 hamburger toolbar
+     ≤600px: drawer 改全寬蓋上(手機) */
+  #mobile-topbar, #sidebar-backdrop { display: none; }
+  @media (max-width: 900px) {
+    body { display: block; }
+    #sidebar { position: fixed; left: 0; top: 0; height: 100vh;
+      width: 280px; max-width: 85vw; transform: translateX(-100%);
+      transition: transform 0.2s ease; z-index: 100;
+      box-shadow: 4px 0 16px #000a; }
+    #sidebar.open { transform: translateX(0); }
+    #main { max-width: none; padding: 0 16px 24px; }
+    #mobile-topbar { display: flex; position: sticky; top: 0;
+      background: #0d1117; z-index: 50; padding: 10px 16px;
+      border-bottom: 1px solid #21262d; align-items: center; gap: 12px;
+      margin: 0 -16px 16px; }
+    #mobile-topbar .hamburger { background: transparent;
+      border: 1px solid #30363d; border-radius: 5px; color: #c9d1d9;
+      padding: 4px 12px; font-size: 18px; cursor: pointer;
+      line-height: 1; font-family: inherit; }
+    #mobile-topbar .hamburger:hover { border-color: #58a6ff; color: #58a6ff; }
+    #mobile-topbar .title { font-size: 14px; color: #f0f6fc; font-weight: 600; }
+    #sidebar-backdrop { position: fixed; inset: 0; background: #000a;
+      z-index: 99; }
+    #sidebar-backdrop.show { display: block; }
+  }
+  @media (max-width: 600px) {
+    #sidebar { width: 100vw; max-width: 100vw; }
+    #main { padding: 0 12px 16px; }
+    #mobile-topbar { margin: 0 -12px 12px; padding: 10px 12px; }
+    .card { padding: 10px 12px; }
+    #feed-header h2 { font-size: 16px; }
+    #collection-header { flex-direction: column; align-items: stretch; }
+    #collection-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  }
 </style>
 </head>
 <body>
+<div id="mobile-topbar">
+  <button class="hamburger" onclick="toggleSidebar()" aria-label="開啟側欄">☰</button>
+  <span class="title">📊 Finance Scraper</span>
+</div>
+<div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
 <div id="sidebar">
   <div id="sidebar-scroll">
     <h1>📊 Finance Scraper</h1>
@@ -230,7 +309,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     <div id="collections-sidebar" style="display:none">
       <div class="collection-section-label">分類</div>
       <div id="collection-list"></div>
-      <div class="collection-section-label">月份</div>
+      <div class="collection-section-label" id="collection-month-label">月份</div>
       <div id="collection-month-list"></div>
     </div>
   </div>
@@ -284,22 +363,22 @@ const SOURCE_CATEGORY = {
 // 每個分類的處理鏈 / 手動觸發說明 — 點 ⓘ 顯示
 const SOURCE_INFO_TEXT = {
   news: "<strong>📰 新聞</strong><br>" +
-        "自動:<code>translate → fetch_body</code>(蒐集時 RSS/API 抓取後做翻譯與內文擷取)<br>" +
-        "手動:摘要點群組標題旁的「補摘要」鈕。<br>" +
-        "LLM 不可用:標題改走 deep-translator(Google);中文 feed 直接跳過翻譯。",
+        "自動：<code>translate → fetch_body</code>（蒐集時 RSS/API 抓取後做翻譯與內文擷取）<br>" +
+        "手動：摘要點群組標題旁的「補摘要」鈕。<br>" +
+        "LLM 不可用：標題改走 deep-translator(Google)；中文 feed 直接跳過翻譯。",
   paper: "<strong>📄 論文</strong><br>" +
-         "來源:arXiv + HuggingFace Daily Papers<br>" +
-         "自動:<code>translate</code>(LLM 不可用時略過 arXiv,HF Daily Papers 仍會收)<br>" +
-         "手動:摘要點群組標題旁的「補摘要」鈕。",
+         "來源：arXiv + HuggingFace Daily Papers<br>" +
+         "自動：<code>translate</code>（LLM 不可用時略過 arXiv,HF Daily Papers 仍會收）<br>" +
+         "手動：摘要點群組標題旁的「補摘要」鈕。",
   finance: "<strong>💰 財經</strong><br>" +
-           "來源:CNBC / Yahoo / 經濟日報 / MarketWatch 等 RSS<br>" +
-           "自動:<code>translate</code>(中文 feed 跳過;英文 feed LLM 不可用會 fallback Google)<br>" +
-           "手動:摘要點群組標題旁的「補摘要」鈕。",
+           "來源：CNBC / Yahoo / 經濟日報 / MarketWatch 等 RSS<br>" +
+           "自動：<code>translate</code>（中文 feed 跳過；英文 feed LLM 不可用會 fallback Google）<br>" +
+           "手動：摘要點群組標題旁的「補摘要」鈕。",
   media: "<strong>📺 YouTube / 🎙️ Podcast</strong><br>" +
          "蒐集只抓 link+title,<strong>STT 不會自動跑</strong>。<br>" +
-         "手動 1:每張卡片右上「🎙️ 送 STT」單獨送該影片轉逐字稿(可同時送多支)。<br>" +
-         "手動 2:STT 完成 body 有了之後,點群組「補摘要」做摘要。<br>" +
-         "去重:DB 已存過的 url 不會再被蒐集重複出現。",
+         "手動 1：每張卡片右上「🎙️ 送 STT」單獨送該影片轉逐字稿（可同時送多支）。<br>" +
+         "手動 2：STT 完成 body 有了之後，點群組「補摘要」做摘要。<br>" +
+         "去重：DB 已存過的 url 不會再被蒐集重複出現。",
 };
 
 function infoKeyForSource(source) {
@@ -321,7 +400,8 @@ function toggleSourceInfo(ev, btn) {
   const pop = document.createElement("div");
   pop.className = "info-popover";
   pop.dataset.forKey = btn.dataset.infoKey;
-  pop.innerHTML = text;
+  // ✕ 鈕本身不需要 onclick — 任何 click 都會觸發既有的 document close handler
+  pop.innerHTML = '<button class="info-close" aria-label="關閉">✕</button>' + text;
   document.body.appendChild(pop);
   const r = btn.getBoundingClientRect();
   // 預設貼右側,若會超出視窗就改成貼左側下方
@@ -359,6 +439,26 @@ let currentCollectionMonth = null;  // 'YYYY-MM'
 let pollTimer = null;
 let monthlyPollTimer = null;
 let releasesPollTimer = null;
+
+// ── mobile drawer ─────────────────────────────────────────────────────────
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const bd = document.getElementById('sidebar-backdrop');
+  const isOpen = sb.classList.toggle('open');
+  bd.classList.toggle('show', isOpen);
+}
+function closeMobileSidebar() {
+  if (!window.matchMedia('(max-width: 900px)').matches) return;
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('show');
+}
+// 點 sidebar 內任何「選擇類」項目就自動關抽屜 — 避免每個 select 函式都要 patch
+// script 在 body 尾,DOM 已就緒,直接綁
+document.getElementById('sidebar').addEventListener('click', (ev) => {
+  if (ev.target.closest('.feed-row, .month-row, .collection-row')) {
+    closeMobileSidebar();
+  }
+});
 
 // ── mode toggle ───────────────────────────────────────────────────────────
 function setMode(m) {
@@ -415,6 +515,15 @@ function feedDisplayLabel(source, feed_name) {
   return SOURCE_LABELS[source]?.split(" ")[0] + " " + (feed_name || "(無 feed)");
 }
 
+// missing/count → 小圓點 class + title text;ratio≥0.5 視為「多數缺」,亮紅
+function feedHealth(missing, count) {
+  if (!count || missing <= 0) return { cls: "ok", title: count ? "全部已摘要" : "尚無資料" };
+  const ratio = missing / count;
+  const pct = Math.round(ratio * 100);
+  if (ratio >= 0.5) return { cls: "bad", title: missing + " / " + count + " 缺摘要 (" + pct + "%)" };
+  return { cls: "warn", title: missing + " / " + count + " 缺摘要 (" + pct + "%)" };
+}
+
 function renderFeedSidebar() {
   const list = document.getElementById("feed-list");
   list.innerHTML = "";
@@ -425,10 +534,12 @@ function renderFeedSidebar() {
   allRow.dataset.key = feedKey(null, null);
   const totalMissing = FEEDS.reduce((s, f) => s + (f.missing || 0), 0);
   const totalCount = FEEDS.reduce((s, f) => s + (f.count || 0), 0);
+  const allH = feedHealth(totalMissing, totalCount);
+  allRow.title = allH.title;
   allRow.innerHTML =
+    '<span class="feed-dot ' + allH.cls + '"></span>' +
     '<span class="feed-name">📦 全部</span>' +
-    '<span class="feed-count">' + totalCount + '</span>' +
-    (totalMissing > 0 ? '<span class="feed-missing">!' + totalMissing + '</span>' : '');
+    '<span class="feed-count">' + totalCount + '</span>';
   allRow.onclick = () => selectFeed(null, null);
   list.appendChild(allRow);
 
@@ -452,10 +563,12 @@ function renderFeedSidebar() {
       row.className = "feed-row";
       row.dataset.key = feedKey(f.source, f.feed_name);
       const name = f.source === "paper" ? "arxiv" : (f.feed_name || "(無 feed)");
+      const h = feedHealth(f.missing || 0, f.count || 0);
+      row.title = h.title;
       row.innerHTML =
+        '<span class="feed-dot ' + h.cls + '"></span>' +
         '<span class="feed-name">' + escapeHtml(name) + '</span>' +
-        '<span class="feed-count">' + f.count + '</span>' +
-        (f.missing > 0 ? '<span class="feed-missing">!' + f.missing + '</span>' : '');
+        '<span class="feed-count">' + f.count + '</span>';
       row.onclick = () => selectFeed(f.source, f.feed_name);
       list.appendChild(row);
     }
@@ -495,8 +608,10 @@ function renderFeedView() {
   const title = feedDisplayLabel(currentFeedData.source, currentFeedData.feed_name);
   header.innerHTML =
     '<h2>' + escapeHtml(title) + '</h2>' +
-    '<div class="sub">共 ' + total + ' 筆,涵蓋 ' + groups.length + ' 天'
-      + (missing > 0 ? '，缺摘要 ' + missing + ' 筆' : '') + '</div>';
+    '<div class="sub">共 <strong>' + total + '</strong> 筆,涵蓋 <strong>'
+      + groups.length + '</strong> 天'
+      + (missing > 0 ? '，缺摘要 <strong>' + missing + '</strong> 筆' : '')
+      + '</div>';
 
   if (!groups.length) {
     content.innerHTML = '<div class="empty">尚無資料</div>';
@@ -519,17 +634,24 @@ function renderFeedView() {
 
 function dateGroupHtml(g, isFirst) {
   // 摘要按鈕:在「特定 feed」(非全部)時永遠顯示,點下去強制重跑該日該 feed 全部摘要
+  // 有缺摘要才升級為黃色 chip(class has-missing),文字也帶數字;沒缺就低調灰色「↻ 重跑」
   const showRetry = currentFeedData && currentFeedData.source !== null && g.events.length > 0;
-  const retryBtn = showRetry
-    ? '<button class="retry-source-btn" data-retry-date="' + g.date + '">'
-      + '⚡ 摘要 ' + g.events.length + ' 篇</button>'
-    : '';
+  let retryBtn = '';
+  if (showRetry) {
+    const hasMissing = g.missing > 0;
+    const cls = hasMissing ? 'retry-source-btn has-missing' : 'retry-source-btn';
+    const text = hasMissing
+      ? '⚡ 補 ' + g.missing + ' 篇'
+      : '↻ 重跑摘要';
+    retryBtn = '<button class="' + cls + '" data-retry-date="' + g.date + '" '
+      + 'title="' + (hasMissing ? '補完缺失的摘要' : '強制重跑當日所有摘要') + '">'
+      + text + '</button>';
+  }
   const cards = g.events.map(cardHtml).join("");
   return '<details class="date-group"' + (isFirst ? ' open' : '') + '>'
     + '<summary>'
     +   '<span class="date-text">📅 ' + g.date + '</span>'
-    +   '<span class="date-count">' + g.events.length + ' 筆'
-    +     (g.missing > 0 ? '，缺 ' + g.missing : '') + '</span>'
+    +   '<span class="date-count">' + g.events.length + ' 筆</span>'
     +   retryBtn
     + '</summary>'
     + '<div class="cards">' + cards + '</div>'
@@ -571,8 +693,11 @@ function renderCollectionList() {
 
 function renderCollectionMonthList() {
   const list = document.getElementById("collection-month-list");
+  const label = document.getElementById("collection-month-label");
   list.innerHTML = "";
   const months = (currentCollection && currentCollection.months) || [];
+  // 沒有月份(如 Releases)就連 section 標籤一起隱藏,避免出現孤伶伶的「月份」字樣
+  label.style.display = months.length ? "" : "none";
   months.forEach(m => {
     const row = document.createElement("div");
     row.className = "month-row";
@@ -599,7 +724,7 @@ async function selectCollection(c) {
   if ((c.months || []).length) {
     await selectCollectionMonth(c.months[0]);
   } else {
-    renderCollectionEmpty(_collectionEmptyHint(c));
+    document.getElementById("collection-content").innerHTML = _collectionEmptyHtml(c);
   }
 }
 
@@ -629,11 +754,34 @@ function _collectionSubtitle(c) {
   return "";
 }
 
-function _collectionEmptyHint(c) {
-  if (c.key === "trending-repos") return "尚無資料，點右上「更新本月熱門」開始收集";
-  if (c.key === "bookmarks") return "尚無收藏，去日報點 ⭐ 加入";
-  if (c.key === "releases") return "尚無資料,點右上「更新 releases」開始收集";
-  return "本 collection 尚無資料";
+// 通用 rich empty 模板:大圖示 + 主標 + 副標 + 可選 CTA
+function richEmptyHtml(opts) {
+  const cta = opts.cta
+    ? '<button class="empty-cta-btn" onclick="' + opts.cta.onclick + '">'
+      + esc(opts.cta.label) + '</button>'
+    : '';
+  return '<div class="empty-rich">'
+    + '<div class="empty-icon">' + opts.icon + '</div>'
+    + '<div class="empty-title">' + esc(opts.title) + '</div>'
+    + (opts.sub ? '<div class="empty-sub">' + esc(opts.sub) + '</div>' : '')
+    + cta + '</div>';
+}
+
+function _collectionEmptyHtml(c) {
+  if (c.key === "trending-repos") return richEmptyHtml({
+    icon: "🚀", title: "尚無熱門 repo 資料",
+    sub: "點右上「⚡ 更新本月熱門」開始第一次收集",
+  });
+  if (c.key === "bookmarks") return richEmptyHtml({
+    icon: "⭐", title: "尚無收藏",
+    sub: "在日報的卡片右上點 ★ 就會被收藏起來",
+    cta: { label: "前往日報 →", onclick: "setMode('daily')" },
+  });
+  if (c.key === "releases") return richEmptyHtml({
+    icon: "📦", title: "尚無 release 資料",
+    sub: "點右上「⚡ 更新 releases」開始第一次收集",
+  });
+  return richEmptyHtml({ icon: "📭", title: "本 collection 尚無資料" });
 }
 
 function renderCollectionActions() {
@@ -659,7 +807,10 @@ function renderCollectionActions() {
 function renderMonthlyRepos(data) {
   const el = document.getElementById("collection-content");
   if (!data.repos || !data.repos.length) {
-    el.innerHTML = '<div class="empty">本月無資料</div>';
+    el.innerHTML = richEmptyHtml({
+      icon: "🚀", title: "本月暫無熱門 repo 資料",
+      sub: "點右上「⚡ 更新本月熱門」開始收集",
+    });
     return;
   }
   const generated = data.generated_at
@@ -982,7 +1133,10 @@ function renderReleases(data) {
   const el = document.getElementById("collection-content");
   const items = data.items || [];
   if (!items.length) {
-    el.innerHTML = `<div class="empty">近 ${data.days} 天無 release</div>`;
+    el.innerHTML = richEmptyHtml({
+      icon: "📦", title: `近 ${data.days} 天無 release`,
+      sub: "點右上「⚡ 更新 releases」重新收集,或選更長時間範圍",
+    });
     return;
   }
   // 依 repo 分組,組內已是 published_at 倒序
@@ -1107,26 +1261,30 @@ function cardHtml(e) {
         title="${isOn ? "取消收藏" : "收藏"}"
         onclick="toggleBookmark(this, '${esc(e.uid)}')">★</button>`
     : "";
-  const date = (e.created_at || "").slice(0, 10);
-  const meta = [
+  // classification 與 source 同名(e.g. finance/Finance)時不重複顯示
+  const showClass = e.classification &&
+    e.classification.toLowerCase() !== (e.source || "").toLowerCase();
+  // 日期由 date-group header 提供,卡片內不再重複顯示
+  const leftMeta = [
     `<span class="badge src-${e.source}">${e.source}</span>`,
     origin ? `<span>${origin}</span>` : "",
-    date ? `<span style="color:#8b949e">📅 ${date}</span>` : "",
-    e.classification ? `<span class="badge">${esc(e.classification)}</span>` : "",
+    showClass ? `<span class="badge">${esc(e.classification)}</span>` : "",
     (e.impact_level === "Breaking" || e.impact_level === "High")
       ? `<span class="badge impact-${e.impact_level}">${e.impact_level}</span>` : "",
     e.score ? `<span>▲ ${e.score}</span>` : "",
     noSummary ? `<span class="badge no-summary">摘要待重跑</span>` : "",
-    sttBtn,
-    star,
   ].filter(Boolean).join("");
+  const rightActions = [sttBtn, star].filter(Boolean).join("");
   const tags = (e.tags || []).length
     ? `<div class="card-tags">${e.tags.map(t => "#" + esc(t)).join(" ")}</div>` : "";
   let summary = e.ai_summary
     ? `<div class="card-summary">${esc(e.ai_summary)}</div>`
     : e.body ? `<div class="card-summary card-body-preview">${esc(e.body.slice(0, 300))}…</div>` : "";
   return `<div class="card">
-    <div class="card-meta">${meta}</div>
+    <div class="card-meta">
+      <div class="card-meta-left">${leftMeta}</div>
+      ${rightActions ? `<div class="card-meta-actions">${rightActions}</div>` : ""}
+    </div>
     <div class="card-title"><a href="${esc(e.url)}" target="_blank">${esc(e.title)}</a></div>
     ${summary}${tags}
   </div>`;
@@ -1169,7 +1327,11 @@ function renderBookmarks(data) {
   const el = document.getElementById("collection-content");
   const items = data.items || [];
   if (!items.length) {
-    el.innerHTML = '<div class="empty">本月尚無收藏</div>';
+    el.innerHTML = richEmptyHtml({
+      icon: "⭐", title: "本月尚無收藏",
+      sub: "在日報的卡片右上點 ★ 就會被收藏起來",
+      cta: { label: "前往日報 →", onclick: "setMode('daily')" },
+    });
     return;
   }
   // 依 source 分組，每組組內已是新→舊（server 已 ORDER BY bookmarked_at DESC）
