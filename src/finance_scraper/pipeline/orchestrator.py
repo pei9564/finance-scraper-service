@@ -9,6 +9,7 @@ import logging
 
 from finance_scraper.domain import ClassifiedEvent, FilterConfig, RawEvent, SummarizedEvent
 from finance_scraper.interfaces import OutputWriter
+from finance_scraper.pipeline import progress as _progress
 from finance_scraper.processing import DailySummarizer, classify_all, filter_events
 from finance_scraper.sources import SourceUnit
 
@@ -30,20 +31,33 @@ class Pipeline:
         self._steps_by_source = {u.source_type: u.steps for u in source_units}
 
     async def run(self, day_str: str) -> None:
+        _progress.write({
+            "kind": "pipeline", "date": day_str, "phase": "collect",
+            "sources_done": {}, "current_source": None,
+        })
         raw_events = self._collect()
+        _progress.update({"phase": "filter", "total_raw": len(raw_events)})
         logger.info(f"Stage 1 完成：共收集到 {len(raw_events)} 筆原始事件")
         if not raw_events:
             logger.warning("未收集到任何事件，流程結束。")
+            _progress.update({"phase": "done"})
             return
 
         filtered = self._filter(raw_events)
+        _progress.update({"phase": "classify", "total_filtered": len(filtered)})
         classified = self._classify(filtered)
+        _progress.update({"phase": "process", "total_classified": len(classified),
+                          "processed": 0})
         if not classified:
+            _progress.update({"phase": "done"})
             return
 
         summarized = self._process_per_source(classified)
+        _progress.update({"phase": "summarize"})
         daily_summary = self._summarize_daily(classified)
+        _progress.update({"phase": "output"})
         await self._write_outputs(summarized, daily_summary, day_str)
+        _progress.update({"phase": "done"})
         logger.info("✅ 流程全部完成")
 
     # ------------------------------------------------------------------
@@ -53,12 +67,24 @@ class Pipeline:
     def _collect(self) -> list[RawEvent]:
         all_raw: list[RawEvent] = []
         for unit in self.source_units:
+            name = unit.source_type.value
+            _progress.update({"current_source": name})
             try:
                 events = unit.collector.collect()
                 all_raw.extend(events)
-                logger.info(f"{unit.source_type.value} 收集：{len(events)} 筆")
+                logger.info(f"{name} 收集：{len(events)} 筆")
+                # sources_done 是 {name: count},逐個 source append
+                cur = _progress.read() or {}
+                done = cur.get("sources_done") or {}
+                done[name] = len(events)
+                _progress.update({"sources_done": done})
             except Exception as e:
-                logger.error(f"{unit.source_type.value} 收集失敗：{e}")
+                logger.error(f"{name} 收集失敗：{e}")
+                cur = _progress.read() or {}
+                done = cur.get("sources_done") or {}
+                done[name] = f"error: {e}"
+                _progress.update({"sources_done": done})
+        _progress.update({"current_source": None})
         return all_raw
 
     # ------------------------------------------------------------------
@@ -93,7 +119,7 @@ class Pipeline:
 
     def _process_per_source(self, classified: list[ClassifiedEvent]) -> list[SummarizedEvent]:
         result: list[SummarizedEvent] = []
-        for event in classified:
+        for i, event in enumerate(classified, 1):
             summarized: ClassifiedEvent = SummarizedEvent(**event.model_dump())
             for step in self._steps_by_source.get(event.source_type, []):
                 try:
@@ -104,6 +130,7 @@ class Pipeline:
                 summarized if isinstance(summarized, SummarizedEvent)
                 else SummarizedEvent(**summarized.model_dump())
             )
+            _progress.update({"processed": i})
         logger.info("Stage 4 完成：逐來源處理鏈執行完畢")
         return result
 

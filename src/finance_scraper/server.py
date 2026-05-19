@@ -48,7 +48,11 @@ COLLECTIONS_REGISTRY: list[dict] = [
 
 # ── pipeline 狀態 ────────────────────────────────────────────────────────────
 _run_lock = asyncio.Lock()
-_run_state: dict = {"running": False, "date": None, "mode": None, "error": None}
+# progress 是 retry / pipeline 用的細節進度;retry 同 process 直接共用 dict ref,
+# pipeline 透過 /tmp 檔案 IPC,讀取時合進這份。
+_run_state: dict = {
+    "running": False, "date": None, "mode": None, "error": None, "progress": None,
+}
 _monthly_lock = asyncio.Lock()
 _monthly_state: dict = {"running": False, "month": None, "error": None}
 _releases_lock = asyncio.Lock()
@@ -94,6 +98,23 @@ async def daily_json(date: str):
     if data is None:
         raise HTTPException(404, f"找不到日報：{date}")
     return _no_cache_json(data)
+
+
+@app.get("/api/feeds")
+async def list_feeds():
+    """日報 sidebar 用 — 列出所有 (source, feed_name) 及其總數/缺摘要數。"""
+    feeds = await daily.list_feeds()
+    return _no_cache_json({"feeds": feeds})
+
+
+@app.get("/api/feeds/events")
+async def feed_events(source: str | None = None, feed_name: str | None = None,
+                      limit_dates: int = 30):
+    """依 feed 撈最近 N 天的事件,server 端已按日期分組。"""
+    if source is not None and source not in SOURCE_LABELS:
+        raise HTTPException(400, f"未知 source：{source}")
+    groups = await daily.load_feed_events(source, feed_name, limit_dates)
+    return _no_cache_json({"source": source, "feed_name": feed_name, "groups": groups})
 
 
 # ── collections ─────────────────────────────────────────────────────────────
@@ -198,11 +219,40 @@ async def delete_bookmark(uid: str):
     return _no_cache_json({"deleted": True})
 
 
+@app.get("/api/llm-health")
+async def get_llm_health():
+    """快速探測 LLM gateway 是否可用 — 重跑摘要前可先按按看,確認連線。"""
+    import yaml
+    from dotenv import load_dotenv
+
+    from finance_scraper.domain import AppConfig
+    from finance_scraper.infrastructure import LLMGatewayClient
+
+    load_dotenv()
+    with open(PROJECT_ROOT / "config" / "repos.yaml", encoding="utf-8") as f:
+        cfg = AppConfig(**yaml.safe_load(f))
+    client = LLMGatewayClient(cfg.ai)
+    ok = await asyncio.to_thread(client.health, 5.0)
+    return _no_cache_json({
+        "ok": ok,
+        "base_url": client.base_url,
+        "model": client.model or "(auto-detect)",
+    })
+
+
 # ── pipeline 觸發 ────────────────────────────────────────────────────────────
 @app.get("/api/status")
 async def get_status():
+    from finance_scraper.pipeline import progress as pipeline_progress
     async with _run_lock:
-        return _no_cache_json(dict(_run_state))
+        out = dict(_run_state)
+        # 若 pipeline 正在跑(subprocess),retry-style 的 in-memory progress 為空 —
+        # 讀檔取得子進程寫入的進度。pipeline 結束後檔案也保留一段時間,只在 running 時合併。
+        if out.get("running") and not out.get("progress"):
+            file_prog = pipeline_progress.read()
+            if file_prog:
+                out["progress"] = file_prog
+    return _no_cache_json(out)
 
 
 @app.get("/api/monthly-status")
@@ -222,15 +272,18 @@ async def run_pipeline(date: str | None = None):
 
 
 @app.post("/api/retry-summary")
-async def post_retry_summary(date: str, source: str):
+async def post_retry_summary(date: str, source: str, feed_name: str | None = None):
     if not date or not source:
         raise HTTPException(400, "需要 date 與 source 參數")
     async with _run_lock:
         if _run_state["running"]:
             raise HTTPException(409, "pipeline 正在執行中")
-        _run_state.update(running=True, date=date, mode=f"retry:{source}", error=None)
-    asyncio.create_task(_run_retry(date, source))
-    return _no_cache_json({"started": True, "date": date, "source": source})
+        mode_label = f"retry:{source}" + (f"/{feed_name}" if feed_name else "")
+        _run_state.update(running=True, date=date, mode=mode_label, error=None)
+    asyncio.create_task(_run_retry(date, source, feed_name))
+    return _no_cache_json(
+        {"started": True, "date": date, "source": source, "feed_name": feed_name}
+    )
 
 
 @app.post("/api/run-monthly")
@@ -268,6 +321,9 @@ def _no_cache_json(payload) -> JSONResponse:
 
 
 async def _spawn_pipeline(date: str | None) -> None:
+    from finance_scraper.pipeline import progress as pipeline_progress
+    pipeline_progress.clear()  # 清掉前次殘留,避免 /api/status 撿到舊資料
+
     env = os.environ.copy()
     if date:
         env["RUN_DATE"] = date
@@ -286,14 +342,27 @@ async def _spawn_pipeline(date: str | None) -> None:
     except Exception as e:
         async with _run_lock:
             _run_state.update(running=False, error=str(e))
+    finally:
+        pipeline_progress.clear()
 
 
-async def _run_retry(date: str, source: str) -> None:
+async def _run_retry(date: str, source: str, feed_name: str | None = None) -> None:
     from finance_scraper.retry import retry_summary
+    # progress 是 retry_summary 邊跑邊 mutate 的同一份 dict;塞進 _run_state["progress"]
+    # 後,/api/status 讀到的就是即時狀態
+    progress: dict = {}
+    async with _run_lock:
+        _run_state["progress"] = progress
     try:
-        await retry_summary(date, source)
+        result = await retry_summary(date, source, feed_name, progress=progress)
+        label = source + (f"/{feed_name}" if feed_name else "")
+        err = (
+            f"補摘要 {label}：{result['failed']} 篇全部失敗(查 server log)"
+            if result["failed"] > 0 and result["updated"] == 0
+            else None
+        )
         async with _run_lock:
-            _run_state.update(running=False, error=None)
+            _run_state.update(running=False, error=err)
     except Exception as e:
         async with _run_lock:
             _run_state.update(running=False, error=str(e))

@@ -170,6 +170,131 @@ async def prune_before(cutoff: date_t) -> int:
         return 0
 
 
+"""sidebar / feed view 與 retry 都用「事件實際發佈日」(created_at,TW 時區)當分組鍵,
+不再用 daily_runs 跑的 run date — 因為一次 run 可能撈入跨日的舊新聞/論文,
+混在一起會誤導使用者。"""
+_PUB_DATE_EXPR = "DATE(created_at AT TIME ZONE 'Asia/Taipei')"
+
+
+async def list_feeds() -> list[dict[str, Any]]:
+    """以 (source, feed_name) 為單位列出所有 feed,供日報 sidebar 使用。
+
+    特殊處理:paper 的 feed_name 為空,整類聚合成一筆(feed_name=None)。
+    舊版殘留的 source='github' 不列出。
+    回傳每筆含 source / feed_name / count / missing / last_date(最近事件的發佈日)。
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""SELECT source,
+                      CASE WHEN source = 'paper' THEN NULL
+                           ELSE NULLIF(feed_name, '') END AS feed_name,
+                      COUNT(*) AS n,
+                      COUNT(*) FILTER (WHERE ai_summary IS NULL OR ai_summary = '') AS missing,
+                      MAX({_PUB_DATE_EXPR}) AS last_date
+               FROM events
+               WHERE source != 'github'
+               GROUP BY source,
+                        CASE WHEN source = 'paper' THEN NULL
+                             ELSE NULLIF(feed_name, '') END
+               ORDER BY source, n DESC"""
+        )
+    return [
+        {
+            "source": r["source"],
+            "feed_name": r["feed_name"],
+            "count": r["n"],
+            "missing": r["missing"],
+            "last_date": r["last_date"].strftime("%Y-%m-%d") if r["last_date"] else None,
+        }
+        for r in rows
+    ]
+
+
+def _feed_where(source: str | None, feed_name: str | None) -> tuple[str, list[Any]]:
+    """共用的 (source, feed_name) WHERE 子句 builder。"""
+    clauses = ["source != 'github'"]
+    params: list[Any] = []
+    if source is not None:
+        params.append(source)
+        clauses.append(f"source = ${len(params)}")
+        if source == "paper":
+            pass  # paper 整類,不過濾 feed_name
+        elif feed_name is None:
+            clauses.append("(feed_name IS NULL OR feed_name = '')")
+        else:
+            params.append(feed_name)
+            clauses.append(f"feed_name = ${len(params)}")
+    return " AND ".join(clauses), params
+
+
+async def load_feed_events(
+    source: str | None,
+    feed_name: str | None,
+    limit_dates: int = 30,
+) -> list[dict[str, Any]]:
+    """依 (source, feed_name) 撈事件,按「實際發佈日」(created_at, TW)分組。
+
+    - source=None 表「全部」(仍排除 github)
+    - feed_name=None 對 paper 表示整類;對其他 source 表示「無 feed」
+    - 結果按發佈日由新到舊,最多 limit_dates 天
+    """
+    where_clause, params = _feed_where(source, feed_name)
+    params.append(limit_dates)
+    limit_param = f"${len(params)}"
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""WITH recent_dates AS (
+                  SELECT DISTINCT {_PUB_DATE_EXPR} AS pub_date FROM events
+                  WHERE {where_clause}
+                  ORDER BY pub_date DESC LIMIT {limit_param}
+                )
+                SELECT uid, source, repo, event_type, classification, title, url,
+                       created_at, impact_level, ai_summary, body, tags, migration_steps,
+                       feed_name, score, authors, categories, arxiv_id,
+                       {_PUB_DATE_EXPR} AS pub_date
+                FROM events
+                WHERE {where_clause}
+                  AND {_PUB_DATE_EXPR} IN (SELECT pub_date FROM recent_dates)
+                ORDER BY pub_date DESC, created_at DESC""",
+            *params,
+        )
+    groups: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        d = r["pub_date"].strftime("%Y-%m-%d")
+        g = groups.setdefault(d, {"date": d, "events": [], "missing": 0})
+        ev = _row_to_event_dict(r)
+        g["events"].append(ev)
+        if not (ev["ai_summary"] or "").strip():
+            g["missing"] += 1
+    return list(groups.values())
+
+
+async def list_events_by_pub_date(
+    pub_date: str, source: str, feed_name: str | None = None,
+) -> list[dict[str, Any]]:
+    """讀取指定發佈日(TW)+ source(+ feed_name)的所有事件 — retry 用。"""
+    where_clause, params = _feed_where(source, feed_name)
+    params.append(_parse_date(pub_date))
+    date_param = f"${len(params)}"
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""SELECT uid, source, repo, event_type, classification, title, url,
+                       created_at, impact_level, ai_summary, body, tags, migration_steps,
+                       feed_name, score, authors, categories, arxiv_id
+                FROM events
+                WHERE {where_clause}
+                  AND {_PUB_DATE_EXPR} = {date_param}
+                ORDER BY created_at DESC""",
+            *params,
+        )
+    return [_row_to_event_dict(r) for r in rows]
+
+
 async def update_event_summary(uid: str, ai_summary: str, body: str | None) -> bool:
     """retry 流程補摘要時用 — 只動 ai_summary（與必要時的 body）。"""
     pool = await get_pool()

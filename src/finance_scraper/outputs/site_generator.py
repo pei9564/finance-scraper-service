@@ -41,9 +41,21 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
   /* ── sidebar ── */
   #sidebar { width: 210px; background: #161b22; border-right: 1px solid #30363d;
-             padding: 16px 0; flex-shrink: 0; height: 100vh; overflow-y: auto;
-             position: sticky; top: 0; }
+             flex-shrink: 0; height: 100vh; position: sticky; top: 0;
+             display: flex; flex-direction: column; }
+  #sidebar-scroll { flex: 1; overflow-y: auto; padding: 16px 0 8px; }
+  #sidebar-footer { padding: 10px 16px; border-top: 1px solid #30363d;
+    background: #161b22; }
   #sidebar h1 { font-size: 15px; padding: 0 16px 10px; color: #f0f6fc; }
+
+  .llm-test-btn { width: 100%; font-size: 12px; padding: 6px 0; background: transparent;
+    border: 1px solid #30363d; border-radius: 5px; color: #8b949e; cursor: pointer; }
+  .llm-test-btn:hover:not(:disabled) { border-color: #58a6ff; color: #58a6ff; }
+  .llm-test-btn:disabled { opacity: 0.6; cursor: wait; }
+  .llm-test-btn.ok { border-color: #3fb95066; color: #56d364; }
+  .llm-test-btn.fail { border-color: #f8514966; color: #f85149; }
+  #llm-test-detail { font-size: 11px; color: #6e7681; margin-top: 6px;
+    word-break: break-all; line-height: 1.4; }
 
   .mode-toggle { display: flex; margin: 0 16px 12px; border: 1px solid #30363d;
                  border-radius: 6px; overflow: hidden; }
@@ -51,20 +63,40 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
               cursor: pointer; background: transparent; color: #8b949e; border: none; }
   .mode-btn.active { background: #1f6feb; color: #fff; }
 
-  #pipeline-status { padding: 2px 16px 8px; font-size: 12px; color: #8b949e; min-height: 18px; }
-  #pipeline-status.running { color: #e3b341; }
+  #pipeline-status { padding: 2px 16px 8px; font-size: 12px; color: #8b949e; min-height: 18px;
+    background: none; border: none; text-align: left; width: 100%; cursor: default;
+    font-family: inherit; }
+  #pipeline-status.running { color: #e3b341; cursor: pointer; }
+  #pipeline-status.running:hover { color: #f0b850; }
+  #pipeline-status.running::after { content: " ▾"; opacity: 0.6; font-size: 10px; }
   #pipeline-status.error { color: #f85149; }
 
-  .date-row { display: flex; align-items: center; gap: 4px; padding: 2px 8px 2px 16px; }
-  .date-label { flex: 1; padding: 6px 0; cursor: pointer; font-size: 14px; }
-  .date-row:hover { background: #21262d; }
-  .date-row.active { background: #1f6feb; color: #fff; }
-  .date-row.active .rerun-btn { color: #ffffffaa; border-color: #ffffff44; }
-  .rerun-btn { font-size: 11px; padding: 2px 6px; background: transparent;
-               border: 1px solid #30363d; border-radius: 4px; color: #8b949e;
-               cursor: pointer; white-space: nowrap; flex-shrink: 0; }
-  .rerun-btn:hover:not(:disabled) { border-color: #58a6ff; color: #58a6ff; }
-  .rerun-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #pipeline-progress { padding: 6px 16px 10px; font-size: 11px; color: #c9d1d9;
+    background: #0d1117; border-top: 1px solid #21262d; border-bottom: 1px solid #21262d;
+    line-height: 1.6; }
+  #pipeline-progress[hidden] { display: none; }
+  #pipeline-progress .row { display: flex; justify-content: space-between; gap: 6px; }
+  #pipeline-progress .key { color: #8b949e; }
+  #pipeline-progress .val { color: #c9d1d9; text-align: right;
+    overflow: hidden; text-overflow: ellipsis; max-width: 130px; white-space: nowrap; }
+  #pipeline-progress .bar { background: #21262d; border-radius: 3px; height: 4px;
+    margin: 4px 0; overflow: hidden; }
+  #pipeline-progress .bar > div { background: #e3b341; height: 100%; transition: width 0.3s; }
+  #pipeline-progress .src-row { display: flex; justify-content: space-between;
+    color: #8b949e; font-size: 11px; }
+  #pipeline-progress .src-row .src-name { color: #c9d1d9; }
+  #pipeline-progress .src-row.error .src-name { color: #f85149; }
+
+  .feed-source-label { padding: 12px 16px 4px; font-size: 11px;
+    color: #6e7681; text-transform: uppercase; letter-spacing: 0.5px; }
+  .feed-row { padding: 6px 16px; cursor: pointer; font-size: 13px;
+    display: flex; align-items: center; gap: 6px; }
+  .feed-row:hover { background: #21262d; }
+  .feed-row.active { background: #1f6feb; color: #fff; }
+  .feed-row.active .feed-count { color: #ffffffaa; }
+  .feed-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .feed-count { font-size: 11px; color: #8b949e; flex-shrink: 0; }
+  .feed-missing { font-size: 10px; color: #e3b341; flex-shrink: 0; }
 
   .run-today-btn { width: 100%; font-size: 12px; padding: 6px 0; background: transparent;
     border: 1px solid #1f6feb88; border-radius: 5px; color: #58a6ff; cursor: pointer; }
@@ -83,15 +115,29 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
   /* ── main ── */
   #main { flex: 1; padding: 24px 32px; max-width: 900px; }
-  #tabs { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
-  .tab { padding: 6px 14px; background: #21262d; border: 1px solid #30363d;
-         border-radius: 6px; cursor: pointer; font-size: 13px; }
-  .tab.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
-  #retry-action { margin-bottom: 12px; min-height: 28px; }
-  .retry-source-btn { font-size: 12px; padding: 4px 10px; background: transparent;
-    border: 1px solid #e3b34155; border-radius: 5px; color: #e3b341; cursor: pointer; }
+  #feed-header { margin-bottom: 16px; }
+  #feed-header h2 { font-size: 18px; color: #f0f6fc; }
+  #feed-header .sub { font-size: 12px; color: #8b949e; margin-top: 4px; }
+
+  .date-group { margin-bottom: 16px; border: 1px solid #30363d; border-radius: 8px;
+    background: #161b22; overflow: hidden; }
+  .date-group > summary { list-style: none; cursor: pointer;
+    padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+    font-size: 14px; color: #f0f6fc; }
+  .date-group > summary::-webkit-details-marker { display: none; }
+  .date-group > summary::before { content: "▶"; font-size: 10px; color: #8b949e;
+    transition: transform 0.15s; display: inline-block; flex-shrink: 0; }
+  .date-group[open] > summary::before { transform: rotate(90deg); }
+  .date-group > summary:hover { background: #1f242c; }
+  .date-group .date-text { font-weight: 600; }
+  .date-group .date-count { font-size: 12px; color: #8b949e; font-weight: 400;
+    margin-left: auto; }
+  .retry-source-btn { font-size: 11px; padding: 3px 10px; background: transparent;
+    border: 1px solid #e3b34155; border-radius: 5px; color: #e3b341; cursor: pointer;
+    white-space: nowrap; flex-shrink: 0; }
   .retry-source-btn:hover:not(:disabled) { background: #e3b34118; }
   .retry-source-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .date-group .cards { padding: 0 14px 14px; }
 
   /* ── cards ── */
   .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px;
@@ -133,41 +179,53 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   #collection-status.error { color: #f85149; }
 
   /* ── releases ── */
-  .release-group { margin-bottom: 28px; }
-  .release-repo { font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 8px;
-    padding-bottom: 6px; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 8px; }
-  .release-repo a { color: #f0f6fc; }
+  .release-group { margin-bottom: 16px; }
+  .release-group > summary { list-style: none; cursor: pointer;
+    font-size: 14px; font-weight: 600; color: #f0f6fc; margin-bottom: 8px;
+    padding-bottom: 6px; border-bottom: 1px solid #30363d;
+    display: flex; align-items: center; gap: 8px; }
+  .release-group > summary::-webkit-details-marker { display: none; }
+  .release-group > summary::before { content: "▶"; font-size: 10px; color: #8b949e;
+    transition: transform 0.15s; display: inline-block; }
+  .release-group[open] > summary::before { transform: rotate(90deg); }
+  .release-group > summary a { color: #f0f6fc; }
   .release-count { font-size: 12px; color: #8b949e; font-weight: 400; }
   select.collection-action-btn { background: #161b22; }
 </style>
 </head>
 <body>
 <div id="sidebar">
-  <h1>📊 Finance Scraper</h1>
-  <div class="mode-toggle">
-    <button class="mode-btn active" id="btn-daily" onclick="setMode('daily')">日報</button>
-    <button class="mode-btn" id="btn-collections" onclick="setMode('collections')">資料庫</button>
-  </div>
-  <div id="pipeline-status"></div>
-  <div id="daily-sidebar">
-    <div style="padding: 4px 16px 8px">
-      <button class="run-today-btn" id="run-today-btn" onclick="runToday()">▶ 執行今天</button>
+  <div id="sidebar-scroll">
+    <h1>📊 Finance Scraper</h1>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btn-daily" onclick="setMode('daily')">日報</button>
+      <button class="mode-btn" id="btn-collections" onclick="setMode('collections')">資料庫</button>
     </div>
-    <div id="date-list"></div>
+    <button id="pipeline-status" onclick="toggleProgressPanel()"></button>
+    <div id="pipeline-progress" hidden></div>
+    <div id="daily-sidebar">
+      <div style="padding: 4px 16px 8px">
+        <button class="run-today-btn" id="run-today-btn" onclick="runToday()">▶ 執行今天</button>
+      </div>
+      <div id="feed-list"></div>
+    </div>
+    <div id="collections-sidebar" style="display:none">
+      <div class="collection-section-label">分類</div>
+      <div id="collection-list"></div>
+      <div class="collection-section-label">月份</div>
+      <div id="collection-month-list"></div>
+    </div>
   </div>
-  <div id="collections-sidebar" style="display:none">
-    <div class="collection-section-label">分類</div>
-    <div id="collection-list"></div>
-    <div class="collection-section-label">月份</div>
-    <div id="collection-month-list"></div>
+  <div id="sidebar-footer">
+    <button class="llm-test-btn" id="llm-test-btn" onclick="testLlm()">🔌 測試 LLM</button>
+    <div id="llm-test-detail"></div>
   </div>
 </div>
 <div id="main">
   <!-- daily view -->
   <div id="daily-view">
-    <div id="tabs"></div>
-    <div id="retry-action"></div>
-    <div id="content"></div>
+    <div id="feed-header"></div>
+    <div id="feed-content"></div>
   </div>
   <!-- collections view -->
   <div id="collection-view" style="display:none">
@@ -185,10 +243,28 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 
 <script>
 const DATA_PREFIX = "__DATA_PREFIX__";
-// SOURCES 由 manifest.json 注入；初始只放「全部」，initDaily 會 append 後端列出的來源
-let SOURCES = [
-  { key: "all", label: "全部" },
-];
+// 來源 label — 從 /api/feeds 推出後備字典(實際 label 也由 server SOURCE_LABELS 帶)
+const SOURCE_LABELS = {
+  news: "📰 新聞",
+  paper: "📄 論文",
+  finance: "💰 財經",
+  youtube_tech: "📺 YT 科技",
+  youtube_fin: "📺 YT 財經",
+  podcast_tech: "🎙️ Podcast 科技",
+  podcast_fin: "🎙️ Podcast 財經",
+};
+// 每個 source 對應的 sidebar 分群標籤(以 medium 分,不用「科技/財經」字眼)
+const SOURCE_CATEGORY = {
+  news: "📰 科技新聞",
+  paper: "📄 論文",
+  finance: "💰 財經",
+  youtube_tech: "📺 YouTube",
+  youtube_fin: "📺 YouTube",
+  podcast_tech: "🎙️ Podcast",
+  podcast_fin: "🎙️ Podcast",
+};
+// FEEDS 由 /api/feeds 注入
+let FEEDS = [];
 // COLLECTIONS 由 /api/collections 注入；每筆含 key/label/type/months
 let COLLECTIONS = [];
 // type → render function；新增 collection type 時在這裡多加一筆
@@ -202,9 +278,10 @@ let currentReleasesDays = 180;
 // 已收藏 UID 集合 — 載入後決定每張卡的 ⭐ 是否實心
 let BOOKMARKED_UIDS = new Set();
 let mode = "daily";
-let currentData = null;
-let currentSource = "all";
-let currentDate = null;
+// currentFeed: {source, feed_name} 或 {source:null, feed_name:null} 表全部
+let currentFeed = { source: null, feed_name: null };
+// currentFeedData: {source, feed_name, groups: [{date, events, missing}]}
+let currentFeedData = null;
 let currentCollection = null;       // collection 物件
 let currentCollectionMonth = null;  // 'YYYY-MM'
 let pollTimer = null;
@@ -244,27 +321,149 @@ async function loadBookmarkUids() {
 
 async function initDaily() {
   try {
-    const res = await fetch(DATA_PREFIX + "manifest.json?" + Date.now());
-    const manifest = await res.json();
-    // 每次 init 都從 [{all}] 重建，避免重跑後 SOURCES / 日期 / tab 重複
-    SOURCES = [{ key: "all", label: "全部" }];
-    if (Array.isArray(manifest.sources)) {
-      SOURCES = SOURCES.concat(manifest.sources);
-    }
-    const list = document.getElementById("date-list");
-    list.innerHTML = "";
-    document.getElementById("tabs").innerHTML = "";
-    manifest.dates.forEach((d, i) => {
-      const row = makeDateRow(d, i === 0);
+    const res = await fetch("/api/feeds?" + Date.now());
+    const data = await res.json();
+    FEEDS = data.feeds || [];
+    renderFeedSidebar();
+    // 預設選 currentFeed(初值是「全部」);polling 重跑後重入會保留當前選取
+    await selectFeed(currentFeed.source, currentFeed.feed_name);
+  } catch {
+    document.getElementById("feed-content").innerHTML = '<div class="empty">尚無資料</div>';
+  }
+}
+
+function feedKey(source, feed_name) {
+  // sidebar dataset key — 用來標 active
+  return (source || "all") + "|" + (feed_name || "");
+}
+
+function feedDisplayLabel(source, feed_name) {
+  if (source === null) return "全部";
+  if (source === "paper") return SOURCE_LABELS.paper + " (arxiv)";
+  return SOURCE_LABELS[source]?.split(" ")[0] + " " + (feed_name || "(無 feed)");
+}
+
+function renderFeedSidebar() {
+  const list = document.getElementById("feed-list");
+  list.innerHTML = "";
+
+  // 全部
+  const allRow = document.createElement("div");
+  allRow.className = "feed-row active";
+  allRow.dataset.key = feedKey(null, null);
+  const totalMissing = FEEDS.reduce((s, f) => s + (f.missing || 0), 0);
+  const totalCount = FEEDS.reduce((s, f) => s + (f.count || 0), 0);
+  allRow.innerHTML =
+    '<span class="feed-name">📦 全部</span>' +
+    '<span class="feed-count">' + totalCount + '</span>' +
+    (totalMissing > 0 ? '<span class="feed-missing">!' + totalMissing + '</span>' : '');
+  allRow.onclick = () => selectFeed(null, null);
+  list.appendChild(allRow);
+
+  // 依 source 分群,組內按 count 倒序(server 已排好)
+  const groups = new Map();
+  for (const f of FEEDS) {
+    const cat = SOURCE_CATEGORY[f.source] || f.source;
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat).push(f);
+  }
+  for (const [cat, feeds] of groups) {
+    const label = document.createElement("div");
+    label.className = "feed-source-label";
+    label.textContent = cat;
+    list.appendChild(label);
+    for (const f of feeds) {
+      const row = document.createElement("div");
+      row.className = "feed-row";
+      row.dataset.key = feedKey(f.source, f.feed_name);
+      const name = f.source === "paper" ? "arxiv" : (f.feed_name || "(無 feed)");
+      row.innerHTML =
+        '<span class="feed-name">' + escapeHtml(name) + '</span>' +
+        '<span class="feed-count">' + f.count + '</span>' +
+        (f.missing > 0 ? '<span class="feed-missing">!' + f.missing + '</span>' : '');
+      row.onclick = () => selectFeed(f.source, f.feed_name);
       list.appendChild(row);
-    });
-    renderTabs();
-    if (manifest.dates.length) {
-      await selectDate(manifest.dates[0], list.firstChild);
-    } else {
-      document.getElementById("content").innerHTML = '<div class="empty">尚無資料</div>';
     }
-  } catch { document.getElementById("content").innerHTML = '<div class="empty">尚無資料</div>'; }
+  }
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"]/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+async function selectFeed(source, feed_name) {
+  currentFeed = { source, feed_name };
+  document.querySelectorAll(".feed-row").forEach(x =>
+    x.classList.toggle("active", x.dataset.key === feedKey(source, feed_name)));
+
+  const params = new URLSearchParams();
+  if (source !== null) params.set("source", source);
+  if (feed_name !== null) params.set("feed_name", feed_name);
+  params.set("_", Date.now());
+  try {
+    const res = await fetch("/api/feeds/events?" + params.toString());
+    currentFeedData = await res.json();
+    renderFeedView();
+  } catch {
+    document.getElementById("feed-content").innerHTML = '<div class="empty">載入失敗</div>';
+  }
+}
+
+function renderFeedView() {
+  const header = document.getElementById("feed-header");
+  const content = document.getElementById("feed-content");
+  if (!currentFeedData) { content.innerHTML = ""; return; }
+  const groups = currentFeedData.groups || [];
+  const total = groups.reduce((s, g) => s + g.events.length, 0);
+  const missing = groups.reduce((s, g) => s + g.missing, 0);
+  const title = feedDisplayLabel(currentFeedData.source, currentFeedData.feed_name);
+  header.innerHTML =
+    '<h2>' + escapeHtml(title) + '</h2>' +
+    '<div class="sub">共 ' + total + ' 筆,涵蓋 ' + groups.length + ' 天'
+      + (missing > 0 ? '，缺摘要 ' + missing + ' 筆' : '') + '</div>';
+
+  if (!groups.length) {
+    content.innerHTML = '<div class="empty">尚無資料</div>';
+    return;
+  }
+  content.innerHTML = groups.map((g, i) => dateGroupHtml(g, i === 0)).join("");
+  // 用 event delegation 接補摘要按鈕,避免把參數塞進 inline onclick
+  content.onclick = (e) => {
+    const btn = e.target.closest(".retry-source-btn[data-retry-date]");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    retrySummary(
+      btn.dataset.retryDate,
+      currentFeedData.source,
+      currentFeedData.feed_name,
+    );
+  };
+}
+
+function dateGroupHtml(g, isFirst) {
+  // 摘要按鈕:在「特定 feed」(非全部)時永遠顯示,點下去強制重跑該日該 feed 全部摘要
+  const showRetry = currentFeedData && currentFeedData.source !== null && g.events.length > 0;
+  const retryBtn = showRetry
+    ? '<button class="retry-source-btn" data-retry-date="' + g.date + '">'
+      + '⚡ 摘要 ' + g.events.length + ' 篇</button>'
+    : '';
+  const cards = g.events.map(cardHtml).join("");
+  return '<details class="date-group"' + (isFirst ? ' open' : '') + '>'
+    + '<summary>'
+    +   '<span class="date-text">📅 ' + g.date + '</span>'
+    +   '<span class="date-count">' + g.events.length + ' 筆'
+    +     (g.missing > 0 ? '，缺 ' + g.missing : '') + '</span>'
+    +   retryBtn
+    + '</summary>'
+    + '<div class="cards">' + cards + '</div>'
+    + '</details>';
+}
+
+async function reloadCurrentFeed() {
+  if (!currentFeedData) return;
+  await selectFeed(currentFeedData.source, currentFeedData.feed_name);
 }
 
 async function initCollections() {
@@ -381,40 +580,6 @@ function renderCollectionActions() {
   }
 }
 
-// ── date selection ────────────────────────────────────────────────────────
-function makeDateRow(d, active) {
-  const row = document.createElement("div");
-  row.className = "date-row" + (active ? " active" : "");
-  row.dataset.date = d;
-  const label = document.createElement("span");
-  label.className = "date-label";
-  label.textContent = d;
-  label.onclick = () => selectDate(d, row);
-  const btn = document.createElement("button");
-  btn.className = "rerun-btn";
-  btn.textContent = "重跑";
-  btn.onclick = (e) => { e.stopPropagation(); rerun(d); };
-  row.appendChild(label);
-  row.appendChild(btn);
-  return row;
-}
-
-async function selectDate(d, row) {
-  document.querySelectorAll(".date-row").forEach(x => x.classList.remove("active"));
-  row.classList.add("active");
-  currentDate = d;
-  const res = await fetch(DATA_PREFIX + d + ".json?" + Date.now());
-  currentData = await res.json();
-  updateTabCounts();
-  render();
-}
-
-async function reloadCurrentDate() {
-  if (!currentDate) return;
-  const row = document.querySelector(`.date-row[data-date="${currentDate}"]`);
-  if (row) await selectDate(currentDate, row);
-}
-
 // ── collection renderers ──────────────────────────────────────────────────
 function renderMonthlyRepos(data) {
   const el = document.getElementById("collection-content");
@@ -448,19 +613,34 @@ function trendingCardHtml(r) {
   </div>`;
 }
 
-// ── daily re-run / retry ──────────────────────────────────────────────────
-async function rerun(date) {
-  updateStatusBar({ running: true, date, mode: "full" });
+// ── LLM health check ──────────────────────────────────────────────────────
+async function testLlm() {
+  const btn = document.getElementById("llm-test-btn");
+  const detail = document.getElementById("llm-test-detail");
+  btn.disabled = true;
+  btn.className = "llm-test-btn";
+  btn.textContent = "🔌 測試中…";
+  detail.textContent = "";
   try {
-    const res = await fetch(`/api/run?date=${date}`, { method: "POST" });
+    const res = await fetch("/api/llm-health?" + Date.now());
     const j = await res.json();
-    if (!res.ok) { updateStatusBar({ running: false, error: j.error || "重跑失敗" }); return; }
-    startPolling();
-  } catch {
-    updateStatusBar({ running: false, error: "無法連線" });
+    if (j.ok) {
+      btn.classList.add("ok");
+      btn.textContent = "✅ LLM 通";
+    } else {
+      btn.classList.add("fail");
+      btn.textContent = "❌ LLM 不通";
+    }
+    detail.textContent = j.base_url + "  / " + j.model;
+  } catch (e) {
+    btn.classList.add("fail");
+    btn.textContent = "❌ 無法呼叫 API";
+    detail.textContent = String(e);
   }
+  btn.disabled = false;
 }
 
+// ── daily run / retry ─────────────────────────────────────────────────────
 async function runToday() {
   updateStatusBar({ running: true, mode: "full" });
   try {
@@ -473,30 +653,19 @@ async function runToday() {
   }
 }
 
-async function retrySummary(date, source) {
-  updateStatusBar({ running: true, date, mode: `retry:${source}` });
+async function retrySummary(date, source, feed_name) {
+  const params = new URLSearchParams({ date, source });
+  if (feed_name !== null && feed_name !== undefined) params.set("feed_name", feed_name);
+  const label = source + (feed_name ? "/" + feed_name : "");
+  updateStatusBar({ running: true, date, mode: "retry:" + label });
   try {
-    const res = await fetch(`/api/retry-summary?date=${date}&source=${source}`, { method: "POST" });
+    const res = await fetch("/api/retry-summary?" + params.toString(), { method: "POST" });
     const j = await res.json();
     if (!res.ok) { updateStatusBar({ running: false, error: j.error || "補摘要失敗" }); return; }
     startPolling();
   } catch {
     updateStatusBar({ running: false, error: "無法連線" });
   }
-}
-
-function updateRetryAction() {
-  const el = document.getElementById("retry-action");
-  if (!currentData || currentSource === "all") { el.innerHTML = ""; return; }
-  const missing = currentData.events.filter(
-    e => e.source === currentSource && !e.ai_summary
-  ).length;
-  const label = SOURCES.find(s => s.key === currentSource)?.label || currentSource;
-  const hint = missing > 0 ? ` (${missing} 篇待補)` : "";
-  el.innerHTML = `<button class="retry-source-btn"
-    onclick="retrySummary('${currentDate}','${currentSource}')">
-    ⚡ 補摘要 ${label}${hint}
-  </button>`;
 }
 
 // ── monthly run ───────────────────────────────────────────────────────────
@@ -531,13 +700,8 @@ function startPolling() {
       updateStatusBar(s);
       if (!s.running) {
         stopPolling();
-        if (currentDate) {
-          await reloadCurrentDate();
-        } else {
-          // 第一次跑（空白狀態）— 重新拉 manifest 與日期清單
-          document.getElementById("date-list").innerHTML = "";
-          await initDaily();
-        }
+        // 重新拉 sidebar(數字更新)與當前 feed
+        await initDaily();
       }
     } catch { stopPolling(); }
   }, 2000);
@@ -549,18 +713,93 @@ function stopPolling() {
 
 function updateStatusBar(s) {
   const el = document.getElementById("pipeline-status");
-  const btns = document.querySelectorAll(".rerun-btn, .retry-source-btn, .run-today-btn");
+  const panel = document.getElementById("pipeline-progress");
+  const btns = document.querySelectorAll(".retry-source-btn, .run-today-btn");
   if (s.running) {
     const label = s.mode && s.mode.startsWith("retry:") ? `補摘要 ${s.mode.split(":")[1]}` : "執行中";
     el.className = "running"; el.textContent = `⚡ ${label} ${s.date || ""}`;
     btns.forEach(b => b.disabled = true);
-  } else if (s.error) {
-    el.className = "error"; el.textContent = "❌ 執行失敗";
-    btns.forEach(b => b.disabled = false);
+    renderProgressPanel(s);
   } else {
-    el.className = ""; el.textContent = "";
+    if (s.error) { el.className = "error"; el.textContent = `❌ ${s.error}`; }
+    else { el.className = ""; el.textContent = ""; }
     btns.forEach(b => b.disabled = false);
+    // 不在跑時收起並清空
+    panel.hidden = true;
+    panel.innerHTML = "";
   }
+}
+
+let progressPanelOpen = false;
+function toggleProgressPanel() {
+  const panel = document.getElementById("pipeline-progress");
+  const el = document.getElementById("pipeline-status");
+  if (el.className !== "running") return;  // 沒在跑就不展開
+  progressPanelOpen = !progressPanelOpen;
+  panel.hidden = !progressPanelOpen;
+}
+
+function renderProgressPanel(s) {
+  const panel = document.getElementById("pipeline-progress");
+  const p = s.progress;
+  if (!p) {
+    panel.innerHTML = '<div class="row"><span class="key">尚未取得進度…</span></div>';
+    return;
+  }
+  // retry 模式:有 total/done/updated/failed/current
+  // pipeline 模式:有 kind="pipeline" + phase + sources_done/current_source/processed
+  let html = "";
+  if (p.kind === "pipeline") {
+    const phaseLabel = {
+      collect: "🌐 收集中", filter: "🔍 過濾", classify: "🏷️ 分類",
+      process: "✍️ 處理(摘要/翻譯)", summarize: "📋 日報", output: "📤 輸出",
+      done: "✅ 完成",
+    }[p.phase] || p.phase;
+    html += '<div class="row"><span class="key">階段</span>'
+      + '<span class="val">' + escapeHtml(phaseLabel) + '</span></div>';
+    if (p.current_source) {
+      html += '<div class="row"><span class="key">目前</span>'
+        + '<span class="val">' + escapeHtml(p.current_source) + '</span></div>';
+    }
+    if (p.total_raw != null) {
+      html += '<div class="row"><span class="key">原始事件</span>'
+        + '<span class="val">' + p.total_raw + '</span></div>';
+    }
+    if (p.processed != null && p.total_classified != null) {
+      const pct = p.total_classified ? Math.round(p.processed * 100 / p.total_classified) : 0;
+      html += '<div class="row"><span class="key">處理</span>'
+        + '<span class="val">' + p.processed + ' / ' + p.total_classified + '</span></div>';
+      html += '<div class="bar"><div style="width:' + pct + '%"></div></div>';
+    }
+    const sd = p.sources_done || {};
+    const keys = Object.keys(sd);
+    if (keys.length) {
+      html += '<div class="key" style="margin-top:6px">已收集</div>';
+      for (const k of keys) {
+        const v = sd[k];
+        const isErr = typeof v === "string" && v.startsWith("error");
+        html += '<div class="src-row' + (isErr ? ' error' : '') + '">'
+          + '<span class="src-name">' + escapeHtml(k) + '</span>'
+          + '<span>' + (isErr ? "失敗" : v + " 筆") + '</span></div>';
+      }
+    }
+  } else if (p.total != null) {
+    // retry
+    const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
+    html += '<div class="row"><span class="key">進度</span>'
+      + '<span class="val">' + (p.done || 0) + ' / ' + p.total + '</span></div>';
+    html += '<div class="bar"><div style="width:' + pct + '%"></div></div>';
+    html += '<div class="row"><span class="key">成功 / 失敗</span>'
+      + '<span class="val">' + (p.updated || 0) + ' / ' + (p.failed || 0) + '</span></div>';
+    if (p.current) {
+      html += '<div class="row"><span class="key">當前</span>'
+        + '<span class="val" title="' + escapeHtml(p.current) + '">'
+        + escapeHtml(p.current) + '</span></div>';
+    }
+  } else {
+    html = '<div class="row"><span class="key">尚未取得進度…</span></div>';
+  }
+  panel.innerHTML = html;
 }
 
 // ── monthly status polling ────────────────────────────────────────────────
@@ -640,11 +879,12 @@ function renderReleases(data) {
   </div>`;
   const parts = [];
   for (const [repo, rels] of groups.entries()) {
-    parts.push(`<div class="release-group">
-      <div class="release-repo">📦 <a href="https://github.com/${esc(repo)}" target="_blank">${esc(repo)}</a>
-        <span class="release-count">${rels.length} 個</span></div>
+    parts.push(`<details class="release-group">
+      <summary>📦 <a href="https://github.com/${esc(repo)}" target="_blank"
+        onclick="event.stopPropagation()">${esc(repo)}</a>
+        <span class="release-count">${rels.length} 個</span></summary>
       ${rels.map(releaseCardHtml).join("")}
-    </div>`);
+    </details>`);
   }
   el.innerHTML = header + parts.join("");
 }
@@ -727,42 +967,6 @@ function updateReleasesStatus(s) {
   }
 }
 
-// ── daily tabs ────────────────────────────────────────────────────────────
-function renderTabs() {
-  const tabs = document.getElementById("tabs");
-  SOURCES.forEach(s => {
-    const el = document.createElement("div");
-    el.className = "tab" + (s.key === currentSource ? " active" : "");
-    el.dataset.key = s.key;
-    el.textContent = s.label;
-    el.onclick = () => {
-      currentSource = s.key;
-      document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
-      el.classList.add("active");
-      render();
-    };
-    tabs.appendChild(el);
-  });
-}
-
-function updateTabCounts() {
-  const events = (currentData && currentData.events) || [];
-  document.querySelectorAll(".tab").forEach(el => {
-    const key = el.dataset.key;
-    const s = SOURCES.find(s => s.key === key);
-    const count = key === "all" ? events.length : events.filter(e => e.source === key).length;
-    el.textContent = `${s.label} (${count})`;
-  });
-}
-
-function render() {
-  if (!currentData) return;
-  const events = currentData.events.filter(e => currentSource === "all" || e.source === currentSource);
-  const content = document.getElementById("content");
-  content.innerHTML = events.length ? events.map(cardHtml).join("") : '<div class="empty">本分類無內容</div>';
-  updateRetryAction();
-}
-
 // ── shared utils ──────────────────────────────────────────────────────────
 function esc(s) {
   return (s || "").replace(/[&<>"]/g, c =>
@@ -805,8 +1009,10 @@ function cardHtml(e) {
 }
 
 async function toggleBookmark(btn, uid) {
-  // 從目前 daily 資料找到完整事件物件（避免把 JSON 塞進 HTML 屬性的逸脫風險）
-  const event = (currentData && currentData.events || []).find(e => e.uid === uid);
+  // 從目前 feed 資料(各日期 group)中扁平化找事件 — 避免把 JSON 塞 HTML attribute
+  const allEvents = ((currentFeedData && currentFeedData.groups) || [])
+    .flatMap(g => g.events);
+  const event = allEvents.find(e => e.uid === uid);
   if (!event) return;
   btn.disabled = true;
   const turningOn = !BOOKMARKED_UIDS.has(uid);
@@ -848,9 +1054,10 @@ function renderBookmarks(data) {
     const k = it.source || "other";
     (groups[k] = groups[k] || []).push(it);
   });
-  const order = ["news", "paper", "finance", "other"];
+  const order = ["news", "paper", "finance", "youtube_tech", "youtube_fin",
+                 "podcast_tech", "podcast_fin", "other"];
   const sections = order.filter(k => groups[k]).map(k => {
-    const label = (SOURCES.find(s => s.key === k) || {}).label || k;
+    const label = SOURCE_LABELS[k] || k;
     const cards = groups[k].map(bookmarkCardHtml).join("");
     return `<h3 style="font-size:13px;color:#8b949e;margin:18px 0 8px">${label} (${groups[k].length})</h3>${cards}`;
   }).join("");
