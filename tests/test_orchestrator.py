@@ -110,6 +110,54 @@ async def test_pipeline_skips_outputs_when_no_events():
 
 
 @pytest.mark.asyncio
+async def test_pipeline_skips_steps_on_cache_hit():
+    news_step = FakeStep()
+    news = _news()
+    units = [SourceUnit(SourceType.NEWS, FakeCollector(SourceType.NEWS, [news]), [news_step])]
+    output = FakeOutput("fake")
+    # cache 命中:同 (source, url) 已有 ai_summary,跳過 step 並套 cached 欄位
+    cache = {
+        (SourceType.NEWS.value, news.url): {
+            "title": "已快取的標題",
+            "body": "已快取的內文",
+            "ai_summary": "CACHED SUMMARY",
+        }
+    }
+    pipeline = Pipeline(units, [output], FilterConfig(), DailySummarizer(StubGateway()),
+                        processed_cache=cache)
+
+    await pipeline.run("2026-05-15")
+
+    assert news_step.applied == 0  # step 沒被執行
+    events = output.calls[0][0]
+    assert len(events) == 1
+    assert events[0].ai_summary == "CACHED SUMMARY"
+    assert events[0].title == "已快取的標題"
+    assert events[0].body == "已快取的內文"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_runs_steps_when_cache_summary_empty():
+    """cache 裡 ai_summary 為空字串時視為未處理,仍跑 step。"""
+    news_step = FakeStep()
+    news = _news()
+    units = [SourceUnit(SourceType.NEWS, FakeCollector(SourceType.NEWS, [news]), [news_step])]
+    output = FakeOutput("fake")
+    cache = {
+        (SourceType.NEWS.value, news.url): {
+            "title": "x", "body": "y", "ai_summary": "   ",  # whitespace 視為空
+        }
+    }
+    pipeline = Pipeline(units, [output], FilterConfig(), DailySummarizer(StubGateway()),
+                        processed_cache=cache)
+
+    await pipeline.run("2026-05-15")
+
+    assert news_step.applied == 1
+    assert output.calls[0][0][0].ai_summary == "STEP DONE"
+
+
+@pytest.mark.asyncio
 async def test_pipeline_isolates_collector_failure():
     class BoomCollector:
         source_type = SourceType.PAPER

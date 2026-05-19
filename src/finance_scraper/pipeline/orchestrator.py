@@ -6,6 +6,7 @@ client 全由 main.py 透過 registry 注入。
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from finance_scraper.domain import ClassifiedEvent, FilterConfig, RawEvent, SummarizedEvent
 from finance_scraper.interfaces import OutputWriter
@@ -23,11 +24,13 @@ class Pipeline:
         output_writers: list[OutputWriter],
         filter_config: FilterConfig,
         daily_summarizer: DailySummarizer,
+        processed_cache: dict[tuple[str, str], dict[str, Any]] | None = None,
     ):
         self.source_units = source_units
         self.output_writers = output_writers
         self.filter_config = filter_config
         self.daily_summarizer = daily_summarizer
+        self.processed_cache = processed_cache or {}
         self._steps_by_source = {u.source_type: u.steps for u in source_units}
 
     async def run(self, day_str: str) -> None:
@@ -119,19 +122,34 @@ class Pipeline:
 
     def _process_per_source(self, classified: list[ClassifiedEvent]) -> list[SummarizedEvent]:
         result: list[SummarizedEvent] = []
+        cache_hits = 0
         for i, event in enumerate(classified, 1):
-            summarized: ClassifiedEvent = SummarizedEvent(**event.model_dump())
-            for step in self._steps_by_source.get(event.source_type, []):
-                try:
-                    summarized = step.apply(summarized)
-                except Exception as e:
-                    logger.error(f"步驟 '{step.name}' 失敗（{event.url}）：{e}")
+            cached = self.processed_cache.get((event.source_type.value, event.url))
+            if cached and (cached.get("ai_summary") or "").strip():
+                # 命中已摘要過的事件 — 直接套 cached 欄位,跳過所有 steps(translate/fetch_body/summarize)
+                updates: dict[str, Any] = {"ai_summary": cached["ai_summary"]}
+                if cached.get("title"):
+                    updates["title"] = cached["title"]
+                if cached.get("body"):
+                    updates["body"] = cached["body"]
+                summarized: ClassifiedEvent = SummarizedEvent(**event.model_dump()).model_copy(update=updates)
+                cache_hits += 1
+            else:
+                summarized = SummarizedEvent(**event.model_dump())
+                for step in self._steps_by_source.get(event.source_type, []):
+                    try:
+                        summarized = step.apply(summarized)
+                    except Exception as e:
+                        logger.error(f"步驟 '{step.name}' 失敗（{event.url}）：{e}")
             result.append(
                 summarized if isinstance(summarized, SummarizedEvent)
                 else SummarizedEvent(**summarized.model_dump())
             )
             _progress.update({"processed": i})
-        logger.info("Stage 4 完成：逐來源處理鏈執行完畢")
+        if cache_hits:
+            logger.info(f"Stage 4 完成：逐來源處理鏈執行完畢（cache 命中 {cache_hits}/{len(classified)},跳過 LLM）")
+        else:
+            logger.info("Stage 4 完成：逐來源處理鏈執行完畢")
         return result
 
     # ------------------------------------------------------------------

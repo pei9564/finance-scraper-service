@@ -75,12 +75,18 @@ async def run_pipeline() -> None:
     if seen_media_urls:
         logger.info(f"已轉寫的 media url 共 {len(seen_media_urls)} 個,本次將跳過")
 
+    # 已摘要過的 (source, url) → cached fields;orchestrator 用來跳過已處理事件的 LLM 步驟
+    processed_cache = await daily_store.load_processed_events()
+    if processed_cache:
+        logger.info(f"已摘要的事件 {len(processed_cache)} 筆,本次命中將跳過 translate/fetch_body/summarize")
+
     pipeline = Pipeline(
         source_units=build_source_units(config, secrets, llm, lookback_days,
                                         seen_media_urls=seen_media_urls),
         output_writers=build_output_writers(config, secrets, OUTPUT_DIR),
         filter_config=config.filters,
         daily_summarizer=DailySummarizer(llm),
+        processed_cache=processed_cache,
     )
     await pipeline.run(day_str)
 

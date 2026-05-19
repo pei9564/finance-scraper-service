@@ -160,6 +160,29 @@ async def load_run(day_str: str) -> dict[str, Any] | None:
     }
 
 
+async def load_processed_events() -> dict[tuple[str, str], dict[str, Any]]:
+    """回傳 {(source, url): {title, body, ai_summary}} — 只含 ai_summary 非空的事件。
+
+    orchestrator 在 re-run 時用此 cache 跳過已摘要事件,免得每次都重打 LLM。
+    跨日生效:同 (source, url) 在 events 表只會存最新一筆(uid 為 PK,upsert 覆蓋)。
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT source, url, title, body, ai_summary
+               FROM events
+               WHERE ai_summary IS NOT NULL AND ai_summary <> ''"""
+        )
+    return {
+        (r["source"], r["url"]): {
+            "title": r["title"],
+            "body": r["body"],
+            "ai_summary": r["ai_summary"],
+        }
+        for r in rows
+    }
+
+
 async def list_urls_for_sources(sources: list[str]) -> set[str]:
     """回傳給定 source 在 events 表中已存在的所有 url(media collector 跨日去重用)。"""
     if not sources:
