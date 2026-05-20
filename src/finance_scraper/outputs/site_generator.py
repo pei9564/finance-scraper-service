@@ -713,8 +713,9 @@ function dateGroupHtml(g, isFirst) {
   // 統一資料流:每個 date-group 上兩個 stage 鈕。
   //   翻譯(黃):body 有但 body_lang ≠ 'zh' 的數量(g.needs_translate)
   //   摘要(藍):body_lang='zh' 但無 ai_summary 的數量(g.needs_summary)
-  // 都是 0 就 hidden;source=null(全部視圖)時也不顯示 — 避免一鍵翻整個資料庫
-  const scoped = currentFeedData && currentFeedData.source !== null && g.events.length > 0;
+  // 都是 0 就 hidden。全部視圖(source=null)也顯示:點下去 = 那一天、所有來源
+  // 一起翻譯/摘要(後端 by-day 已序列+節流,避免一次塞爆 LLM)。範圍仍限單日。
+  const scoped = currentFeedData && g.events.length > 0;
   const nT = g.needs_translate || 0;
   const nS = g.needs_summary || 0;
   const btns = scoped

@@ -65,6 +65,7 @@ async def translate_day(
     feed_name: str | None,
     llm: LLMGateway | None,
     progress: Optional[dict] = None,
+    delay_seconds: float = 0.0,
 ) -> dict[str, int]:
     """把指定發佈日的待翻譯 events 翻成中文。
 
@@ -113,6 +114,8 @@ async def translate_day(
         if progress is not None:
             progress.update(done=progress.get("done", 0) + 1,
                             updated=updated, failed=failed)
+        if delay_seconds > 0:
+            await asyncio.sleep(delay_seconds)
     logger.info(f"翻譯完成:成功 {updated} / 失敗 {failed} / 共 {total}")
     return {"total": total, "updated": updated, "failed": failed}
 
@@ -151,6 +154,7 @@ async def summarize_day(
     llm: LLMGateway | None,
     ai_config: AIConfig,
     progress: Optional[dict] = None,
+    delay_seconds: float = 0.0,
 ) -> dict[str, int]:
     """把指定發佈日的「已翻譯但無摘要」events 補上摘要。
 
@@ -185,5 +189,7 @@ async def summarize_day(
         if progress is not None:
             progress.update(done=progress.get("done", 0) + 1,
                             updated=updated, failed=failed)
+        if delay_seconds > 0:
+            await asyncio.sleep(delay_seconds)
     logger.info(f"摘要完成:成功 {updated} / 失敗 {failed} / 共 {total}")
     return {"total": total, "updated": updated, "failed": failed}

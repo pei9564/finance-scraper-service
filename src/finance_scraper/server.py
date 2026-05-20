@@ -472,7 +472,10 @@ async def _run_translate_day(date: str, source: str | None, feed_name: str | Non
         _run_state["progress"] = progress
     try:
         llm, _cfg = await _load_llm()
-        result = await translate_day(date, source, feed_name, llm, progress=progress)
+        result = await translate_day(
+            date, source, feed_name, llm, progress=progress,
+            delay_seconds=_cfg.ai.llm_call_delay_seconds,
+        )
         err = (
             f"翻譯失敗:{result['failed']}/{result['total']}(查 server log)"
             if result["failed"] > 0 and result["updated"] == 0
@@ -493,7 +496,10 @@ async def _run_summarize_day(date: str, source: str | None, feed_name: str | Non
         _run_state["progress"] = progress
     try:
         llm, cfg = await _load_llm()
-        result = await summarize_day(date, source, feed_name, llm, cfg.ai, progress=progress)
+        result = await summarize_day(
+            date, source, feed_name, llm, cfg.ai, progress=progress,
+            delay_seconds=cfg.ai.llm_call_delay_seconds,
+        )
         err = (
             f"摘要失敗:{result['failed']}/{result['total']}(查 server log)"
             if result["failed"] > 0 and result["updated"] == 0
