@@ -121,12 +121,15 @@ class PaperCollector:
         return events
 
     def _fetch_hf_papers(self) -> list[RawPaperEvent]:
-        """從 Hugging Face Daily Papers 取 upvotes 排名前 N 篇。"""
+        """從 Hugging Face Daily Papers 取 upvotes 排名前 N 篇。
+
+        不套 lookback_days 過濾：daily_papers endpoint 本身已是策展過的當日精選，
+        而 publishedAt 是論文的 arXiv 發表日（常落後策展日數天），拿來當 cutoff 會把整批濾掉。
+        """
         r = httpx.get(_HF_DAILY_PAPERS_URL, timeout=15)
         r.raise_for_status()
         items = r.json()
 
-        cutoff = datetime.now(timezone.utc) - timedelta(days=self.lookback_days)
         events: list[RawPaperEvent] = []
         for item in items:
             paper = item.get("paper") or {}
@@ -138,9 +141,7 @@ class PaperCollector:
             try:
                 published = datetime.fromisoformat(published_str.replace("Z", "+00:00"))
             except (AttributeError, ValueError):
-                continue
-            if published < cutoff:
-                continue
+                published = datetime.now(timezone.utc)
 
             authors = [a.get("name", "") for a in paper.get("authors", [])[:5] if a.get("name")]
             events.append(RawPaperEvent(
