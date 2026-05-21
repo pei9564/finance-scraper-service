@@ -19,8 +19,9 @@ from contextlib import asynccontextmanager
 from datetime import date as date_t, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from finance_scraper.outputs.site_generator import DATA_URL_PREFIX, SOURCE_LABELS, build_html
 from finance_scraper.storage import bookmarks, close_pool, daily, digests, get_pool, init_schema, releases as releases_store, trending
@@ -258,15 +259,18 @@ async def bookmark_uids():
     return _no_cache_json({"uids": uids})
 
 
+class BookmarkRequest(BaseModel):
+    """前端送整包 daily event 物件;這裡只強制驗證收藏必要的三欄,其餘欄位
+    (uid / repo / feed_name / categories / created_at ...)以 extra=allow 原樣透傳給 storage。"""
+    model_config = ConfigDict(extra="allow")
+    source: str = Field(min_length=1)
+    url: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+
+
 @app.post("/api/bookmarks", status_code=201)
-async def add_bookmark(request: Request):
-    try:
-        event = await request.json()
-    except Exception:
-        raise HTTPException(400, "需要 JSON body")
-    if not isinstance(event, dict) or not event.get("url") or not event.get("title") or not event.get("source"):
-        raise HTTPException(400, "缺少必要欄位 source/url/title")
-    return _no_cache_json(await bookmarks.add(event))
+async def add_bookmark(payload: BookmarkRequest):
+    return _no_cache_json(await bookmarks.add(payload.model_dump()))
 
 
 @app.delete("/api/bookmarks/{uid}")

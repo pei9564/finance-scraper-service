@@ -62,7 +62,7 @@ def test_poll_returns_job_when_done(monkeypatch):
     job = client.poll("JOB-1")
 
     assert job is not None
-    assert job["text"] == "transcript"
+    assert job.text == "transcript"
 
 
 def test_poll_returns_none_on_error_status(monkeypatch):

@@ -15,10 +15,26 @@ import os
 import time
 
 import httpx
+from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
 
 _TERMINAL = {"done", "error", "cancelled"}
+
+
+class TranscribeRequest(BaseModel):
+    """POST /transcribe_url 的 form 欄位。"""
+    url: str
+    language: str = ""
+    topic: str = ""
+
+
+class JobView(BaseModel):
+    """stt-ai-worker 的 job 回應；欄位全給預設,容忍部分缺漏。"""
+    job_id: str = ""
+    status: str = ""
+    text: str | None = None
+    error: str | None = None
 
 
 class STTClient:
@@ -37,16 +53,17 @@ class STTClient:
 
     def submit_url(self, url: str, topic: str = "") -> str:
         """POST /transcribe_url,回 job_id;失敗拋 httpx.HTTPError。"""
+        req = TranscribeRequest(url=url, language=self.language, topic=topic)
         with httpx.Client(timeout=30) as client:
-            resp = client.post(
-                f"{self.base_url}/transcribe_url",
-                data={"url": url, "language": self.language, "topic": topic},
-            )
+            resp = client.post(f"{self.base_url}/transcribe_url", data=req.model_dump())
             resp.raise_for_status()
-            return resp.json()["job_id"]
+            job_id = JobView.model_validate(resp.json()).job_id
+        if not job_id:
+            raise httpx.HTTPError("STT 未回傳 job_id")
+        return job_id
 
-    def poll(self, job_id: str) -> dict | None:
-        """阻塞輪詢直到終止狀態或 timeout。回傳完成的 JobView dict;timeout / error 回 None。"""
+    def poll(self, job_id: str) -> JobView | None:
+        """阻塞輪詢直到終止狀態或 timeout。回傳完成的 JobView;timeout / error 回 None。"""
         deadline = time.time() + self.timeout
         while True:
             try:
@@ -56,16 +73,16 @@ class STTClient:
                         logger.warning(f"STT job {job_id} 不存在(被刪?)")
                         return None
                     resp.raise_for_status()
-                    job = resp.json()
-            except httpx.HTTPError as e:
+                    job = JobView.model_validate(resp.json())
+            except (httpx.HTTPError, ValidationError) as e:
                 logger.warning(f"輪詢 STT job {job_id} 出錯:{e}")
                 return None
 
-            status = (job.get("status") or "").lower()
+            status = job.status.lower()
             if status == "done":
                 return job
             if status in _TERMINAL:
-                logger.warning(f"STT job {job_id} 結束狀態 {status}:{job.get('error')}")
+                logger.warning(f"STT job {job_id} 結束狀態 {status}:{job.error}")
                 return None
 
             if time.time() >= deadline:
@@ -83,5 +100,5 @@ class STTClient:
         job = self.poll(job_id)
         if job is None:
             return None
-        text = (job.get("text") or "").strip()
+        text = (job.text or "").strip()
         return text or None
