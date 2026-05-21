@@ -23,7 +23,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from finance_scraper.outputs.site_generator import DATA_URL_PREFIX, SOURCE_LABELS, build_html
-from finance_scraper.storage import bookmarks, close_pool, daily, digests, init_schema, releases as releases_store, trending
+from finance_scraper.storage import bookmarks, close_pool, daily, digests, get_pool, init_schema, releases as releases_store, trending
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +118,29 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/index.html", response_class=HTMLResponse)
 async def index():
     return HTMLResponse(content=build_html(), headers={"Cache-Control": "no-cache"})
+
+
+# ── health / readiness（k8s 探針）─────────────────────────────────────────────
+@app.get("/healthz")
+async def healthz():
+    """Liveness — 只證明進程還活著,不碰 DB/LLM,讓 k8s 不會因下游慢而誤殺 pod。"""
+    return _no_cache_json({"status": "ok"})
+
+
+@app.get("/readyz")
+async def readyz():
+    """Readiness — ping 一次 DB(短 timeout);不通就回 503,k8s 暫時把流量移開。"""
+    try:
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await asyncio.wait_for(conn.fetchval("SELECT 1"), timeout=2.0)
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable", "error": str(e)},
+            headers={"Cache-Control": "no-cache"},
+        )
+    return _no_cache_json({"status": "ready"})
 
 
 @app.get(f"{DATA_URL_PREFIX}manifest.json")
