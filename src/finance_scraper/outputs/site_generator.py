@@ -31,7 +31,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Finance Scraper</title>
+<title>AI 閱讀台 · 工程文章與論文</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
@@ -323,7 +323,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
 <div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
 <div id="sidebar">
   <div id="sidebar-scroll">
-    <h1>📊 Finance Scraper</h1>
+    <h1>AI 閱讀台</h1>
     <div class="mode-toggle">
       <button class="mode-btn active" id="btn-daily" onclick="setMode('daily')">日報</button>
       <button class="mode-btn" id="btn-collections" onclick="setMode('collections')">資料庫</button>
